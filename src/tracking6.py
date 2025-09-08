@@ -17,7 +17,7 @@ def correct_box(box: Boxes) -> bool:
         box (Boxes): _description_
 
     Returns:
-        NoReturn: _description_
+        bool:
     """
     return box.xyxy[0][2] < 1230 and box.xyxy[0][0] > 50 and box.conf[0] > 0.7
 
