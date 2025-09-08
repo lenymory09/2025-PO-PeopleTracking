@@ -1,8 +1,10 @@
 import argparse
-from tracking5 import track_people
+
+import cv2
+
+from tracking5 import PersonTracker
 from threading import Thread
-
-
+from typing import List
 
 def parse_args():
     parser = argparse.ArgumentParser(description="Deep SORT Realtime")
@@ -12,15 +14,23 @@ def parse_args():
 
 def main():
     args = parse_args()
-    threads = []
-    for src in args.source:
-        t = Thread(target=track_people, args=(src,))
-        t.start()
-        threads.append(t)
+    sources = args.source
+    trackers: List[PersonTracker] = []
+    known_embeddings = {}
+    for source in sources:
+        trackers.append(PersonTracker(source))
 
-    for t in threads:
-        t.join()
 
+    while True:
+        for i, tracker in enumerate(trackers):
+            cv2.imshow(f"stream : {i}", tracker.track_people(known_embeddings))
+            if cv2.waitKey(1) & 0xFF == ord('q'):
+                break
+
+    for tracker in trackers:
+        tracker.cap.release()
+
+    cv2.destroyAllWindows()
 
 if __name__ == "__main__":
     main()
