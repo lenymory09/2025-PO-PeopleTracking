@@ -28,6 +28,7 @@ def generate_new_id() -> int:
     return next_id
 
 def track_people(source: str) -> NoReturn:
+    print("salut:", source)
     cap = cv2.VideoCapture(source)
     model = YOLO("yolov8n.pt")
 
@@ -44,7 +45,6 @@ def track_people(source: str) -> NoReturn:
 
         results = model(frame, classes=[0])[0]  # YOLOv8 returns a list; take the first element
         detections = []
-
 
         boxes = list(filter(correct_box, results.boxes))
 
@@ -92,9 +92,13 @@ def track_people(source: str) -> NoReturn:
 
             #x1, y1, x2, y2 = map(int, track.to_ltrb())
 
-        cv2.imshow('frame', frame)
+        cv2.imshow(str(source), frame)
         if cv2.waitKey(1) & 0xFF == ord('q'):
             break
 
     cap.release()
     cv2.destroyAllWindows()
+
+
+if __name__ == '__main__':
+    track_people("angle2.mp4")
