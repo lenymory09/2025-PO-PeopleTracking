@@ -6,8 +6,43 @@ from ultralytics.engine.results import Results, Boxes
 from deep_sort_realtime.deepsort_tracker import DeepSort
 from scipy.spatial.distance import cosine
 from typing import NoReturn, Dict, List
+import torchreid
+import torch
+from torchvision import transforms
+from PIL import Image
+
+transform = transforms.Compose([
+    transforms.Resize((256, 128)),  # format standard ReID
+    transforms.ToTensor(),
+    transforms.Normalize(mean=[0.485, 0.456, 0.406],
+                         std=[0.229, 0.224, 0.225])
+])
 
 DISTANCE_THRESHOLD = 0.19
+
+# Charger un modèle OSNet pré-entraîné
+model = torchreid.models.build_model(
+    name='osnet_x1_0',
+    num_classes=1000,
+    loss='softmax',
+    pretrained=True
+)
+
+model.eval()  # mode inference
+
+
+def extract_embeddings(img, boxes, model):
+    embeds = []
+    for box in boxes:
+        x1, y1, x2, y2 = map(int, box)
+        person_crop = img[y1:y2, x1:x2]  # crop OpenCV
+        person_crop = Image.fromarray(person_crop[:, :, ::-1])  # BGR->RGB
+        tensor = transform(person_crop).unsqueeze(0)
+
+        with torch.no_grad():
+            emb = model(tensor)
+        embeds.append(emb.squeeze().numpy())
+    return embeds
 
 
 def is_correct_box(box: Boxes) -> bool:
@@ -40,7 +75,7 @@ class PersonTracker(DeepSort):
         self.cap = cv2.VideoCapture(source)
         self.next_temp_id = 0
 
-    def track_people(self, known_embeddings: Dict[int, List[np.ndarray]], assigned_id) -> NoReturn:
+    def track_people(self, known_embeddings: Dict[int, List[np.ndarray]], assigned_ids) -> NoReturn:
         ret, frame = self.cap.read()
         if not ret:
             return None
@@ -56,7 +91,9 @@ class PersonTracker(DeepSort):
             # Format: ([left, top, width, height], confidence, class_id)
             detections.append(([x1, y1, x2 - x1, y2 - y1], conf, cls_id))
 
-        embeds = self.generate_embeds(raw_dets=detections, frame=frame)
+        # embeds = self.generate_embeds(raw_dets=detections, frame=frame)
+
+        embeds = extract_embeddings(frame, [box.xyxy[0] for box in boxes], model)
 
         for i in range(len(embeds)):
             current_embedding = embeds[i]
@@ -67,7 +104,7 @@ class PersonTracker(DeepSort):
             best_score = 1.0  # Cosine distance: plus petit = plus proche
 
             for known_id, emb_list in known_embeddings.items():
-                if known_id not in assigned_id:
+                if known_id not in assigned_ids:
                     for ref_emb in emb_list:
                         score = cosine(current_embedding, ref_emb)
                         if score < DISTANCE_THRESHOLD and score < best_score:  # Seuil à ajuster
@@ -80,11 +117,11 @@ class PersonTracker(DeepSort):
                     known_embeddings[matched_id].pop(0)
 
                 known_embeddings[matched_id].append(current_embedding)
-                assigned_id.append(matched_id)
+                assigned_ids.append(matched_id)
             else:
                 new_id = generate_new_id()
                 label = f"New ID {new_id}"
-                assigned_id.append(new_id)
+                assigned_ids.append(new_id)
                 known_embeddings[new_id] = [current_embedding]
             # Affichage
             x1, y1, x2, y2 = map(int, box.xyxy[0])
