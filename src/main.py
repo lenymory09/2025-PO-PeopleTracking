@@ -22,8 +22,9 @@ def main():
 
 
     while True:
+        assigned_id = []
         for i, tracker in enumerate(trackers):
-            cv2.imshow(f"stream : {i}", tracker.track_people(known_embeddings))
+            cv2.imshow(f"stream : {i}", tracker.track_people(known_embeddings, assigned_id))
             if cv2.waitKey(1) & 0xFF == ord('q'):
                 break
 
