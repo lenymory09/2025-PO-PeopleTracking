@@ -75,7 +75,7 @@ class PersonTracker(DeepSort):
         self.cap = cv2.VideoCapture(source)
         self.next_temp_id = 0
 
-    def track_people(self, known_embeddings: Dict[int, List[np.ndarray]], assigned_ids) -> NoReturn:
+    def track_people(self, known_embeddings: Dict[int, List[np.ndarray]]) -> NoReturn:
         ret, frame = self.cap.read()
         if not ret:
             return None
@@ -94,6 +94,8 @@ class PersonTracker(DeepSort):
         # embeds = self.generate_embeds(raw_dets=detections, frame=frame)
 
         embeds = extract_embeddings(frame, [box.xyxy[0] for box in boxes], model)
+
+        assigned_ids = []
 
         for i in range(len(embeds)):
             current_embedding = embeds[i]
