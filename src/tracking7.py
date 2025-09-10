@@ -9,7 +9,7 @@ from ultralytics import YOLO
 from ultralytics.engine.results import Results, Boxes
 from deep_sort_realtime.deepsort_tracker import DeepSort
 from scipy.spatial.distance import cosine
-from typing import NoReturn, Dict, List
+from typing import NoReturn, Dict, List, Optional
 
 PENDING_THRESHOLD = 0.2
 STABILITY_FRAMES = 5
