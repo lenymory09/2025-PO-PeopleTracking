@@ -18,17 +18,17 @@ transform = transforms.Compose([
                          std=[0.229, 0.224, 0.225])
 ])
 
-DISTANCE_THRESHOLD = 0.19
+DISTANCE_THRESHOLD = 0.25
 
 # Charger un modèle OSNet pré-entraîné
-model = torchreid.models.build_model(
+model_torch = torchreid.models.build_model(
     name='osnet_x1_0',
     num_classes=1000,
     loss='softmax',
     pretrained=True
 )
 
-model.eval()  # mode inference
+model_torch.eval()  # mode inference
 
 
 def extract_embeddings(img, boxes, model):
@@ -40,7 +40,7 @@ def extract_embeddings(img, boxes, model):
         tensor = transform(person_crop).unsqueeze(0)
 
         with torch.no_grad():
-            emb = model(tensor)
+            emb = model_torch(tensor)
         embeds.append(emb.squeeze().numpy())
     return embeds
 

@@ -2,7 +2,7 @@ import argparse
 
 import cv2
 
-from tracking5 import PersonTracker
+from person_tracker import PersonTracker
 from threading import Thread
 from typing import List
 
