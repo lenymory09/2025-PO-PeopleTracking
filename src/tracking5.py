@@ -33,14 +33,14 @@ colors = [(random.randint(0, 255), random.randint(0, 255), random.randint(0, 255
 model = YOLO("yolov8n.pt")
 
 
-class PersonTracker(DeepSort):
+class Camera(DeepSort):
     def __init__(self, source: str):
         super().__init__(embedder="mobilenet", embedder_gpu=True, max_age=5, n_init=2)
         self.source = source
         self.cap = cv2.VideoCapture(source)
         self.next_temp_id = 0
 
-    def track_people(self, known_embeddings: Dict[int, List[np.ndarray]], assigned_id) -> NoReturn:
+    def track_people(self, known_embeddings: Dict[int, List[np.ndarray]]) -> NoReturn:
         ret, frame = self.cap.read()
         if not ret:
             return None
@@ -58,6 +58,8 @@ class PersonTracker(DeepSort):
 
         embeds = self.generate_embeds(raw_dets=detections, frame=frame)
 
+        assigned_ids = []
+
         for i in range(len(embeds)):
             current_embedding = embeds[i]
             box = boxes[i]
@@ -67,7 +69,7 @@ class PersonTracker(DeepSort):
             best_score = 1.0  # Cosine distance: plus petit = plus proche
 
             for known_id, emb_list in known_embeddings.items():
-                if known_id not in assigned_id:
+                if known_id not in assigned_ids:
                     for ref_emb in emb_list:
                         score = cosine(current_embedding, ref_emb)
                         if score < DISTANCE_THRESHOLD and score < best_score:  # Seuil à ajuster
@@ -80,12 +82,13 @@ class PersonTracker(DeepSort):
                     known_embeddings[matched_id].pop(0)
 
                 known_embeddings[matched_id].append(current_embedding)
-                assigned_id.append(matched_id)
+                assigned_ids.append(matched_id)
             else:
                 new_id = generate_new_id()
                 label = f"New ID {new_id}"
-                assigned_id.append(new_id)
+                assigned_ids.append(new_id)
                 known_embeddings[new_id] = [current_embedding]
+
             # Affichage
             x1, y1, x2, y2 = map(int, box.xyxy[0])
             cv2.rectangle(frame, (x1, y1), (x2, y2), colors[matched_id if matched_id is not None else 0], 2)
@@ -95,6 +98,28 @@ class PersonTracker(DeepSort):
             # x1, y1, x2, y2 = map(int, track.to_ltrb())
 
         return frame
+
+
+class PersonTracker(object):
+    known_embeddings: Dict[int, List[np.ndarray]] = {}
+    cameras: List[Camera] = []
+
+    def __init__(self, sources: List[str]):
+        self.sources = sources
+        for source in sources:
+            self.cameras.append(Camera(source))
+
+    def release(self):
+        for camera in self.cameras:
+            camera.cap.release()
+
+    def get_frames(self):
+        frames: List[np.ndarray] = []
+
+        for camera in self.cameras:
+            frames.append(camera.track_people(self.known_embeddings))
+
+        return frames
 
 
 if __name__ == '__main__':

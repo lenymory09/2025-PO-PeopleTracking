@@ -1,6 +1,6 @@
 import argparse
 import cv2
-from person_tracker import PersonTracker
+from tracking5 import PersonTracker
 from typing import List
 
 
@@ -13,20 +13,17 @@ def parse_args():
 def main():
     args = parse_args()
     sources = args.source
-    trackers: List[PersonTracker] = []
-    known_embeddings = {}
-    for source in sources:
-        trackers.append(PersonTracker(source))
+    tracker = PersonTracker(sources)
 
     try:
         for _ in range(500):
-            for i, tracker in enumerate(trackers):
-                cv2.imshow(f"stream : {i}", tracker.track_people(known_embeddings))
+            for i, frame in enumerate(tracker.get_frames()):
+                cv2.imshow(f"Stream : {i}", frame)
                 if cv2.waitKey(1) & 0xFF == ord('q'):
                     raise KeyboardInterrupt("Keyboard Interrupt raise")
-    except KeyboardInterrupt:
-        for tracker in trackers:
-            tracker.cap.release()
+    except KeyboardInterrupt as _:
+        print("Fin du programme")
+        tracker.release()
         cv2.destroyAllWindows()
 
 
