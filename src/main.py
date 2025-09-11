@@ -16,7 +16,7 @@ def main():
     tracker = PersonTracker(sources)
 
     try:
-        for _ in range(500):
+        while True:
             for i, frame in enumerate(tracker.get_frames()):
                 cv2.imshow(f"Stream : {i}", frame)
                 if cv2.waitKey(1) & 0xFF == ord('q'):
