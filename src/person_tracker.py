@@ -153,6 +153,7 @@ class Camera(object):
             # Format: ([left, top, width, height], confidence, class_id)
             detections.append(([x1, y1, x2 - x1, y2 - y1], conf, cls_id))
 
+        embeds = None
         if self.model == 'deepsort':
             embeds = model_deepsort.generate_embeds(raw_dets=detections, frame=frame)
         elif self.model == 'osnet':
