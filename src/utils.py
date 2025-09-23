@@ -1,4 +1,5 @@
 from time import time
+from typing import List
 
 
 def chrono(fn):
@@ -9,3 +10,7 @@ def chrono(fn):
         return result
 
     return wrapper
+
+
+def parse_source(sources: List[str]):
+    return list(map(lambda source: int(source) if source.isnumeric() else source, sources))

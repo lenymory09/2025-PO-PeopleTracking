@@ -13,7 +13,7 @@ from typing import NoReturn, Dict, List
 from utils import chrono
 
 DISTANCE_THRESHOLD = 0.18
-MAX_DESCRIPTION_NUMBER = 50
+MAX_DESCRIPTION_NUMBER = 400
 
 transform = transforms.Compose([
     transforms.Resize((256, 128)),
@@ -23,15 +23,15 @@ transform = transforms.Compose([
 ])
 
 model_osnet = torchreid.models.build_model(
-    name="osnet_x1_0",
+    name="resnet152",
     num_classes=1000,
     loss="softmax",
     pretrained=True
 )
 
 model_osnet.eval()
-
 model_deepsort = DeepSort(embedder="mobilenet", embedder_gpu=True, max_age=5, n_init=2)
+
 
 
 # def boxes_overlap(boxA, boxB) -> bool:
@@ -104,9 +104,9 @@ def generate_embeddings(img, boxes):
     return result
 
 
-next_id = 1
+next_id = 0
 colors = [(random.randint(0, 255), random.randint(0, 255), random.randint(0, 255)) for _ in range(2000)]
-model = YOLO("yolov8l.pt")
+model = YOLO("yolo11n.pt")
 
 
 class Camera(object):
@@ -114,7 +114,7 @@ class Camera(object):
         self.model = model
         self.source = source
         self.cap = cv2.VideoCapture(source)
-        self.next_temp_id = 0
+        assert self.cap.isOpened(), "Cap is not opened."
 
     @chrono
     def track_people(self, known_embeddings: Dict[int, List[np.ndarray]]) -> NoReturn:
@@ -125,7 +125,7 @@ class Camera(object):
         if not ret:
             return None
 
-        results = model(frame, classes=[0])[0]  # YOLOv8 returns a list; take the first element
+        results = model(frame, classes=[0], device="mps")[0]  # YOLOv8 returns a list; take the first element
         detections = []
         boxes = list(filter(lambda box: is_correct_box(box, width), results.boxes))
 
