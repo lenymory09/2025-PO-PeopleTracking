@@ -1,25 +1,35 @@
 import argparse
-from tracking5 import track_people
-from threading import Thread
-
-
+import cv2
+from person_tracker import PersonTracker
+from utils import parse_source
 
 def parse_args():
     parser = argparse.ArgumentParser(description="Deep SORT Realtime")
-    parser.add_argument("-s", "--source", nargs="+", help="Video Source", default=["./angle2.mp4"])
+    parser.add_argument("-s", "--source", nargs="+", help="Video Source", required=True)
+    parser.add_argument("--model", help="AI Model", default="osnet")
     return parser.parse_args()
+
+
+
+MODELS = [
+    'osnet',
+    'deepsort'
+]
 
 
 def main():
     args = parse_args()
-    threads = []
-    for src in args.source:
-        t = Thread(target=track_people, args=(src,))
-        t.start()
-        threads.append(t)
+    sources = parse_source(args.source)
+    model = args.model
+    assert model in MODELS, "Specified model not in models list."
+    tracker = PersonTracker(sources, model)
 
-    for t in threads:
-        t.join()
+    try:
+        tracker.start()
+    except KeyboardInterrupt as _:
+        print("Fin du programme")
+        tracker.release()
+        cv2.destroyAllWindows()
 
 
 if __name__ == "__main__":
