@@ -116,6 +116,9 @@ class Camera(object):
         self.cap = cv2.VideoCapture(source)
         assert self.cap.isOpened(), "Cap is not opened."
 
+    def read(self):
+        return self.cap.read()
+
     @chrono
     def track_people(self, known_embeddings: Dict[int, List[np.ndarray]]) -> NoReturn:
         print(self.model)
@@ -124,8 +127,10 @@ class Camera(object):
         print("Shape de la frame:", frame.shape)
         if not ret:
             return None
+        if cv2.waitKey(1) == ord('q'):
+            raise KeyboardInterrupt()
 
-        results = model(frame, classes=[0], device="mps")[0]  # YOLOv8 returns a list; take the first element
+        results = model(frame, classes=[0], device="cpu")[0]  # YOLOv8 returns a list; take the first element
         detections = []
         boxes = list(filter(lambda box: is_correct_box(box, width), results.boxes))
 
