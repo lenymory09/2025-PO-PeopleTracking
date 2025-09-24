@@ -9,10 +9,10 @@ from ultralytics import YOLO
 from ultralytics.engine.results import Boxes
 from deep_sort_realtime.deepsort_tracker import DeepSort
 from scipy.spatial.distance import cosine
-from typing import NoReturn, Dict, List
+from typing import Dict, List, Optional, NoReturn, Tuple
 from utils import chrono
 
-DISTANCE_THRESHOLD = 0.18
+DISTANCE_THRESHOLD = 0.25
 MAX_DESCRIPTION_NUMBER = 400
 
 transform = transforms.Compose([
@@ -23,7 +23,7 @@ transform = transforms.Compose([
 ])
 
 model_osnet = torchreid.models.build_model(
-    name="resnet152",
+    name="squeezenet1_1",
     num_classes=1000,
     loss="softmax",
     pretrained=True
@@ -31,7 +31,6 @@ model_osnet = torchreid.models.build_model(
 
 model_osnet.eval()
 model_deepsort = DeepSort(embedder="mobilenet", embedder_gpu=True, max_age=5, n_init=2)
-
 
 
 # def boxes_overlap(boxA, boxB) -> bool:
@@ -85,23 +84,107 @@ def generate_new_id() -> int:
     return next_id
 
 
-def extract_embedding(img, box, model):
-    x1, y1, x2, y2 = map(int, box.xyxy[0])
+def extract_embedding(img: np.ndarray, box, model_ia):
+    x1, y1, width, height = map(int, box[0])
+    x2, y2 = x1 + width, y1 + height
     person_crop = img[y1:y2, x1:x2]
     person_crop = Image.fromarray(person_crop[:, :, ::-1])
     tensor = transform(person_crop).unsqueeze(0)
 
     with torch.no_grad():
-        emb = model(tensor)
+        emb = model_ia(tensor)
     return emb.squeeze().numpy()
 
 
-def generate_embeddings(img, boxes):
-    result = []
-    for box in boxes:
-        result.append(extract_embedding(img, box, model_osnet))
+def generate_embeddings(img, boxes, ai):
+    if ai == "osnet":
+        result = []
+        for box in boxes:
+            result.append(extract_embedding(img, box, model_osnet))
 
-    return result
+        return result
+
+    return model_deepsort.generate_embeds(img, raw_dets=boxes)
+
+
+def draw_rectangle(f: np.ndarray, box: Boxes, label: str, person_id: int) -> np.ndarray:
+    """
+    Draw the rectangle and the ids in the image.
+    :param f: Frame to draw onto.
+    :param box: Box of the person
+    :param label: Label of the person (ID and nb embeddings)
+    :param person_id:
+    :return:
+    """
+    x1, y1, x2, y2 = map(int, box.xyxy[0])
+    cv2.rectangle(f, (x1, y1), (x2, y2), colors[person_id if person_id is not None else 0], 2)
+    cv2.putText(f, label, (x1, y1 - 10), cv2.FONT_ITALIC, 0.7,
+                colors[person_id if person_id is not None else 0], 2)
+
+    return f
+
+
+def generate_detections(frame: np.ndarray, frame_width: int) -> Tuple[List[Tuple[List, float, int]], List[Boxes]]:
+    """
+    Generate the detections for the ReID Algorithm.
+    :param frame: Frame to analyse
+    :param frame_width: Width of the frame.
+    :return: The detections and the boxes
+    """
+    results = model(frame, classes=[0], device="cpu")[0]
+    detections = []
+    boxes = list(filter(lambda detection: is_correct_box(detection, frame_width), results.boxes))
+    for box in boxes:
+        x1, y1, x2, y2 = map(int, box.xyxy[0])
+        conf = float(box.conf[0])
+        cls_id = int(box.cls[0])
+        # Format: ([left, top, width, height], confidence, class_id)
+        detections.append(([x1, y1, x2 - x1, y2 - y1], conf, cls_id))
+    return detections, boxes
+
+
+def process_id(embed: np.ndarray, matched_id: Optional[int], known_persons: Dict[int, List[np.ndarray]],
+               assigned_ids: List[int]) -> str:
+    """
+    Save the id in the known_person or create it and add it to the assigned_ids
+    :param embed: person description
+    :param matched_id: ID matched with the person (or None)
+    :param known_persons: Known person dictionary
+    :param assigned_ids: List of assigned IDs
+    :return: the label of the box
+    """
+
+    if matched_id:
+        # if is_diverse(current_embedding, known_embeddings[matched_id]):
+        known_persons[matched_id].append(embed)
+
+        if len(known_persons[matched_id]) > MAX_DESCRIPTION_NUMBER:
+            known_persons[matched_id].pop(0)
+
+        nb_embeddings = len(known_persons[matched_id])
+
+        label = f"ID {matched_id} : {'Max' if nb_embeddings == MAX_DESCRIPTION_NUMBER else nb_embeddings}"
+    else:
+        matched_id = generate_new_id()
+        label = f"New ID {matched_id}"
+        known_persons[matched_id] = [embed]
+
+    assigned_ids.append(matched_id)
+    return label
+
+
+def get_nearest_person(embed: np.ndarray, known_persons: Dict[int, List[np.ndarray]], assigned_ids: List[int]):
+    matched_id = None
+    best_score = 1.0
+    for known_id, emb_list in known_persons.items():
+        if known_id not in assigned_ids:
+            for ref_emb in emb_list:
+                score = cosine(embed, ref_emb)
+                if score < DISTANCE_THRESHOLD and score < best_score:  # Seuil à ajuster
+                    best_score = score
+                    matched_id = known_id
+
+    return matched_id
 
 
 next_id = 0
@@ -109,9 +192,13 @@ colors = [(random.randint(0, 255), random.randint(0, 255), random.randint(0, 255
 model = YOLO("yolo11n.pt")
 
 
-class Camera(object):
-    def __init__(self, source: str, model: str):
-        self.model = model
+class Camera:
+    """
+    Represents one camera of the PersonTracker
+    """
+
+    def __init__(self, source: str, ai: str):
+        self.model = ai
         self.source = source
         self.cap = cv2.VideoCapture(source)
         assert self.cap.isOpened(), "Cap is not opened."
@@ -120,20 +207,21 @@ class Camera(object):
         return self.cap.read()
 
     @chrono
-    def track_people(self, known_embeddings: Dict[int, List[np.ndarray]]) -> NoReturn:
-        print(self.model)
-        ret, frame = self.cap.read()
+    def track_people(self, known_persons: Dict[int, List[np.ndarray]]) -> Optional[np.ndarray]:
+        """
+        Read the stream video and return the analysed frame.
+        :param known_persons: Known person by the program.
+        :return: The analysed frame.
+        """
+        ret, frame = self.read()
         height, width, _ = frame.shape
-        print("Shape de la frame:", frame.shape)
+        print("Shape :", frame.shape)
         if not ret:
             return None
         if cv2.waitKey(1) == ord('q'):
             raise KeyboardInterrupt()
 
-        results = model(frame, classes=[0], device="cpu")[0]  # YOLOv8 returns a list; take the first element
-        detections = []
-        boxes = list(filter(lambda box: is_correct_box(box, width), results.boxes))
-
+        detections, boxes = generate_detections(frame, width)
         # Vérifier le chevauchement avec d'autres boîtes déjà traitées
         # result = []
         # for i, box in enumerate(boxes):
@@ -151,73 +239,33 @@ class Camera(object):
         # for box in result:
         #     boxes.remove(box)
 
-        for box in boxes:
-            x1, y1, x2, y2 = map(int, box.xyxy[0])
-            conf = float(box.conf[0])
-            cls_id = int(box.cls[0])
-            # Format: ([left, top, width, height], confidence, class_id)
-            detections.append(([x1, y1, x2 - x1, y2 - y1], conf, cls_id))
-
-        embeds = None
-        if self.model == 'deepsort':
-            embeds = model_deepsort.generate_embeds(raw_dets=detections, frame=frame)
-        elif self.model == 'osnet':
-            embeds = generate_embeddings(frame, boxes)
+        embeds = generate_embeddings(frame, detections, self.model)
 
         assigned_ids = []
 
-        for i in range(len(embeds)):
-            current_embedding = embeds[i]
-            box = boxes[i]
-
+        for current_embedding, box in zip(embeds, boxes):
             # Comparaison avec les embeddings connus.
-            matched_id = None
-            best_score = 1.0  # Cosine distance: plus petit = plus proche
+            matched_id = get_nearest_person(current_embedding, known_persons, assigned_ids)
 
-            for known_id, emb_list in known_embeddings.items():
-                if known_id not in assigned_ids:
-                    for ref_emb in emb_list:
-                        score = cosine(current_embedding, ref_emb)
-                        if score < DISTANCE_THRESHOLD and score < best_score:  # Seuil à ajuster
-                            best_score = score
-                            matched_id = known_id
-            if matched_id:
-                # if is_diverse(current_embedding, known_embeddings[matched_id]):
-                known_embeddings[matched_id].append(current_embedding)
-
-                if len(known_embeddings[matched_id]) > MAX_DESCRIPTION_NUMBER:
-                    known_embeddings[matched_id].pop(0)
-
-                nb_embeddings = len(known_embeddings[matched_id])
-
-                label = f"ID {matched_id} : {'Max' if nb_embeddings == MAX_DESCRIPTION_NUMBER else nb_embeddings}"
-                assigned_ids.append(matched_id)
-            else:
-                new_id = generate_new_id()
-                label = f"New ID {new_id}"
-                assigned_ids.append(new_id)
-                known_embeddings[new_id] = [current_embedding]
+            label = process_id(current_embedding, matched_id, known_persons, assigned_ids)
 
             # Affichage
-            x1, y1, x2, y2 = map(int, box.xyxy[0])
-            cv2.rectangle(frame, (x1, y1), (x2, y2), colors[matched_id if matched_id is not None else 0], 2)
-            cv2.putText(frame, label, (x1, y1 - 10), cv2.FONT_ITALIC, 0.7,
-                        colors[matched_id if matched_id is not None else 0], 2)
+            frame = draw_rectangle(frame, box, label, matched_id)
 
         return frame
 
 
-class PersonTracker(object):
+class PersonTracker:
     known_embeddings: Dict[int, List[np.ndarray]] = {}
     cameras: List[Camera] = []
 
-    def __init__(self, sources: List[str], model: str):
-        self.model: str = model
-        if model == 'deepsort':
+    def __init__(self, sources: List[str], ai: str):
+        self.model: str = ai
+        if ai == 'deepsort':
             self.model_ai = DeepSort(embedder="mobilenet", embedder_gpu=True, max_age=5, n_init=2)
         self.sources = sources
         for source in sources:
-            self.cameras.append(Camera(source, model))
+            self.cameras.append(Camera(source, ai))
 
     def release(self):
         for camera in self.cameras:
@@ -231,24 +279,10 @@ class PersonTracker(object):
 
         return frames
 
-    def start(self):
+    def start(self) -> NoReturn:
         while True:
-            for i, camera in enumerate(self.cameras):
+            for i, camera in enumerate(self.cameras, start=1):
                 frame_analysed = camera.track_people(self.known_embeddings)
                 cv2.imshow(f"stream {i}", frame_analysed)
                 if cv2.waitKey(1) & 0xFF == ord('q'):
                     raise KeyboardInterrupt("Fin du programme")
-
-
-if __name__ == '__main__':
-    tracker = PersonTracker("angle2.mp4")
-
-    known_embeddings = {}
-    while True:
-        frame = tracker.track_people(known_embeddings)
-        cv2.imshow("source", frame)
-        if cv2.waitKey(1) & 0xFF == ord('q'):
-            break
-
-    tracker.cap.release()
-    cv2.destroyAllWindows()
