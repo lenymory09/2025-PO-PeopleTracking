@@ -5,7 +5,7 @@ import PySide6
 import cv2
 from PySide6 import QtWidgets
 
-from person_tracker import PersonTracker
+from person_tracker import EnhancedPersonTracker as PersonTracker
 from utils import parse_source
 from gui import GUIApplication
 
@@ -28,7 +28,7 @@ def main():
     sources = parse_source(args.source)
     model = args.model
     assert model in MODELS, "Specified model not in models list."
-    tracker = PersonTracker(sources, model)
+    tracker = PersonTracker(sources)
     app = QtWidgets.QApplication([])
     app.setApplicationName("Person Tracker")
     gui_app = GUIApplication(tracker)

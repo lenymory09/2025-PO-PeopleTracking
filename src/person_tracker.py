@@ -1,3 +1,4 @@
+from collections import deque
 import cv2
 import random
 import numpy as np
@@ -11,9 +12,13 @@ from deep_sort_realtime.deepsort_tracker import DeepSort
 from scipy.spatial.distance import cosine
 from typing import Dict, List, Optional, NoReturn, Tuple
 from utils import chrono
+import os
 
-DISTANCE_THRESHOLD = 0.25
-MAX_DESCRIPTION_NUMBER = 400
+torch.set_num_threads(os.cpu_count())
+
+DISTANCE_THRESHOLD = 0.15  # Tighter threshold
+MAX_DESCRIPTION_NUMBER = 200  # More manageable number
+MIN_TRACK_LENGTH = 5  # Require minimum track length
 
 transform = transforms.Compose([
     transforms.Resize((256, 128)),
@@ -23,32 +28,81 @@ transform = transforms.Compose([
 ])
 
 model_osnet = torchreid.models.build_model(
-    name="squeezenet1_1",
-    num_classes=1000,
+    name="squeezenet1_0",
+    num_classes=1500,
     loss="softmax",
     pretrained=True
 )
 
+# torchreid.utils.load_pretrained_weights(model_osnet, 'osnet_x1_0_market_1501.pth')
+
 model_osnet.eval()
-model_deepsort = DeepSort(embedder="mobilenet", embedder_gpu=True, max_age=5, n_init=2)
+
+model_deepsort = DeepSort(
+    embedder=None,
+    embedder_gpu=True,
+    max_age=30,  # Increased max age
+    n_init=5,  # More initializations required
+    max_iou_distance=0.5,  # Tighter IoU
+    nn_budget=50,  # Smaller budget for faster matching
+    embedder_model_name='osnet_x1_0'
+)
+
+next_id = 0
+colors = [(random.randint(0, 255), random.randint(0, 255), random.randint(0, 255)) for _ in range(2000)]
+model = YOLO("yolo11n.pt")
 
 
-# def boxes_overlap(boxA, boxB) -> bool:
-#     """
-#     Vérifie si deux boîtes se chevauchents
-#     :param boxA:
-#     :param boxB:
-#     :return:
-#     """
-#     xA = max(boxA[0], boxB[0])
-#     yA = max(boxA[1], boxB[1])
-#     xB = min(boxA[2], boxB[2])
-#     yB = min(boxA[3], boxB[3])
-#     return (xB - xA) > 0 and (yB - yA) > 0
+def boxes_overlap(box1: List[int], box2) -> bool:
+    """
+    Vérifie si deux boîtes se chevauchents
+    :param box1: boite 1 à analyser
+    :param box2: boite 2 à analyser
+    :return:
+    """
+    xA = max(box1[0], box2[0])
+    yA = max(box1[1], box2[1])
+    xB = min(box1[2], box2[2])
+    yB = min(box1[3], box2[3])
+    return (xB - xA) > 0 and (yB - yA) > 0
 
 
-def is_diverse(new_emb, emb_list, min_dist=0.1):
-    return all(cosine(new_emb, e) > min_dist for e in emb_list)
+def filter_boxes_by_dimensions(boxes: List[Boxes], width: int) -> List[Boxes]:
+    return list(filter(lambda box: is_correct_box(box, width), boxes))
+
+
+def filter_by_aspect_ratio(boxes: List[Boxes], min_ratio: float = 0.1, max_ratio: float = 0.8) -> List[Boxes]:
+    """Filter boxes by human-like aspect ratios"""
+    filtered = []
+    for box in boxes:
+        x1, y1, x2, y2 = box.xyxy[0]
+        width = x2 - x1
+        height = y2 - y1
+        if height == 0:
+            continue
+        aspect_ratio = width / height
+        if min_ratio <= aspect_ratio <= max_ratio:
+            filtered.append(box)
+    return filtered
+
+
+def filter_boxes_by_overlapping(boxes: List[Boxes]) -> List[Boxes]:
+    boxes = sorted(boxes, key=lambda box: box.xyxy[0][0])
+    filtered_boxes = []
+    for i in range(len(boxes)):
+        box1 = boxes[i]
+        for j in range(i + 1, len(boxes)):
+            box2 = boxes[j]
+            if boxes_overlap(box1.xyxy[0], box2.xyxy[0]):
+                best_box = max(box1, box2, key=lambda box: box.xyxy[0][3] - box.xyxy[0][1])
+                if best_box not in filtered_boxes:
+                    filtered_boxes.append(best_box)
+
+    return filtered_boxes
+
+
+def euclidean_distance(emb1: np.ndarray, emb2: np.ndarray):
+    return np.linalg.norm(emb1 - emb2)
 
 
 def is_correct_box(box: Boxes, width: int) -> bool:
@@ -84,19 +138,45 @@ def generate_new_id() -> int:
     return next_id
 
 
-def extract_embedding(img: np.ndarray, box, model_ia):
+def extract_embedding(img: np.ndarray, box: Tuple, model_ia):
+    """Improved embedding extraction with preprocessing"""
     x1, y1, width, height = map(int, box[0])
     x2, y2 = x1 + width, y1 + height
+
+    # Expand box slightly for better context
+    padding = 10
+    x1 = max(0, x1 - padding)
+    y1 = max(0, y1 - padding)
+    x2 = min(img.shape[1], x2 + padding)
+    y2 = min(img.shape[0], y2 + padding)
+
     person_crop = img[y1:y2, x1:x2]
+
+    # Skip if crop is too small
+    if person_crop.size == 0 or person_crop.shape[0] < 50 or person_crop.shape[1] < 25:
+        return None
+
+    # Enhanced preprocessing
     person_crop = Image.fromarray(person_crop[:, :, ::-1])
-    tensor = transform(person_crop).unsqueeze(0)
 
-    with torch.no_grad():
-        emb = model_ia(tensor)
-    return emb.squeeze().numpy()
+    # Apply multiple augmentations and average embeddings
+    embeddings = []
+    for augment in [False, True]:  # Original and flipped
+        if augment:
+            tensor = transform(transforms.functional.hflip(person_crop)).unsqueeze(0)
+        else:
+            tensor = transform(person_crop).unsqueeze(0)
+
+        with torch.no_grad():
+            emb = model_ia(tensor)
+            embeddings.append(emb.squeeze().numpy())
+
+    # Average the embeddings
+    avg_embedding = np.mean(embeddings, axis=0)
+    return avg_embedding / np.linalg.norm(avg_embedding)  # L2 normalize
 
 
-def generate_embeddings(img, boxes, ai):
+def generate_embeddings(img, boxes: List[Tuple], ai):
     if ai == "osnet":
         result = []
         for box in boxes:
@@ -124,16 +204,20 @@ def draw_rectangle(f: np.ndarray, box: Boxes, label: str, person_id: int) -> np.
     return f
 
 
-def generate_detections(frame: np.ndarray, frame_width: int) -> Tuple[List[Tuple[List, float, int]], List[Boxes]]:
+def generate_detections(frame: np.ndarray) -> Tuple[List[Tuple], List[Boxes]]:
     """
     Generate the detections for the ReID Algorithm.
     :param frame: Frame to analyse
-    :param frame_width: Width of the frame.
     :return: The detections and the boxes
     """
-    results = model(frame, classes=[0], device="cpu")[0]
+    _, frame_width, _ = frame.shape
+
+    results = model(frame, classes=[0], device="cpu", conf=0.5, iou=0.5)[0]
     detections = []
-    boxes = list(filter(lambda detection: is_correct_box(detection, frame_width), results.boxes))
+    boxes = results.boxes
+    # boxes = filter_boxes_by_dimensions(boxes, frame_width)
+    # boxes = filter_boxes_by_overlag(boxes)
+    # boxes = filter_by_aspect_ratio(boxes, 0.2)
     for box in boxes:
         x1, y1, x2, y2 = map(int, box.xyxy[0])
         conf = float(box.conf[0])
@@ -173,13 +257,14 @@ def process_id(embed: np.ndarray, matched_id: Optional[int], known_persons: Dict
     return label
 
 
-def get_nearest_person(embed: np.ndarray, known_persons: Dict[int, List[np.ndarray]], assigned_ids: List[int]):
+def get_nearest_person_before(embed: np.ndarray, known_persons: Dict[int, List[np.ndarray]], assigned_ids: List[int]):
     matched_id = None
     best_score = 1.0
     for known_id, emb_list in known_persons.items():
         if known_id not in assigned_ids:
             for ref_emb in emb_list:
                 score = cosine(embed, ref_emb)
+                # score = euclidean_distance(embed, ref_emb)
                 if score < DISTANCE_THRESHOLD and score < best_score:  # Seuil à ajuster
                     best_score = score
                     matched_id = known_id
@@ -187,85 +272,45 @@ def get_nearest_person(embed: np.ndarray, known_persons: Dict[int, List[np.ndarr
     return matched_id
 
 
-next_id = 0
-colors = [(random.randint(0, 255), random.randint(0, 255), random.randint(0, 255)) for _ in range(2000)]
-model = YOLO("yolo11n.pt")
+def get_nearest_person_improved(embed: np.ndarray, known_persons: Dict[int, List[np.ndarray]], assigned_ids: List[int]):
+    """Improved matching with multiple strategies"""
+    matched_id = None
+    best_score = float('inf')
 
+    for known_id, emb_list in known_persons.items():
+        if known_id in assigned_ids:
+            continue
 
-class Camera:
-    """
-    Represents one camera of the PersonTracker
-    """
+        # Use multiple reference embeddings for comparison
+        scores = []
+        for ref_emb in emb_list[-10:]:  # Use recent embeddings
+            # Try multiple distance metrics
+            cosine_dist = cosine(embed, ref_emb)
+            euclidean_dist = euclidean_distance(embed, ref_emb)
 
-    def __init__(self, source: str, ai: str):
-        self.model = ai
-        self.source = source
-        self.cap = cv2.VideoCapture(source)
-        assert self.cap.isOpened(), "Cap is not opened."
+            # Combined score
+            combined_score = 0.7 * cosine_dist + 0.3 * (euclidean_dist / 10.0)
+            scores.append(combined_score)
 
-    def read(self):
-        return self.cap.read()
+        # Use best match from recent embeddings
+        if scores:
+            current_best = min(scores)
+            if current_best < DISTANCE_THRESHOLD and current_best < best_score:
+                best_score = current_best
+                matched_id = known_id
 
-    @chrono
-    def track_people(self, known_persons: Dict[int, List[np.ndarray]]) -> Optional[np.ndarray]:
-        """
-        Read the stream video and return the analysed frame.
-        :param known_persons: Known person by the program.
-        :return: The analysed frame.
-        """
-        ret, frame = self.read()
-        height, width, _ = frame.shape
-        print("Shape :", frame.shape)
-        if not ret:
-            return None
-        if cv2.waitKey(1) == ord('q'):
-            raise KeyboardInterrupt()
-
-        detections, boxes = generate_detections(frame, width)
-        # Vérifier le chevauchement avec d'autres boîtes déjà traitées
-        # result = []
-        # for i, box in enumerate(boxes):
-        #     x1, y1, x2, y2 = map(int, box.xyxy[0])
-        #     current_box = (x1, y1, x2, y2)
-        #     for j in range(i):
-        #         prev_box = boxes[j]
-        #         px1, py1, px2, py2 = map(int, prev_box.xyxy[0])
-        #         prev_box_coords = (px1, py1, px2, py2)
-        #
-        #         if boxes_overlap(current_box, prev_box_coords):
-        #             result.append(box)
-        #
-        #
-        # for box in result:
-        #     boxes.remove(box)
-
-        embeds = generate_embeddings(frame, detections, self.model)
-
-        assigned_ids = []
-
-        for current_embedding, box in zip(embeds, boxes):
-            # Comparaison avec les embeddings connus.
-            matched_id = get_nearest_person(current_embedding, known_persons, assigned_ids)
-
-            label = process_id(current_embedding, matched_id, known_persons, assigned_ids)
-
-            # Affichage
-            frame = draw_rectangle(frame, box, label, matched_id)
-
-        return frame
+    return matched_id
 
 
 class PersonTracker:
     known_embeddings: Dict[int, List[np.ndarray]] = {}
-    cameras: List[Camera] = []
 
     def __init__(self, sources: List[str], ai: str):
         self.model: str = ai
-        if ai == 'deepsort':
-            self.model_ai = DeepSort(embedder="mobilenet", embedder_gpu=True, max_age=5, n_init=2)
-        self.sources = sources
+        self.sources: List[str] = sources
+        self.cameras: List[Camera] = []
         for source in sources:
-            self.cameras.append(Camera(source, ai))
+            self.cameras.append(Camera(source, ai, ))
 
     def release(self):
         for camera in self.cameras:
@@ -276,7 +321,6 @@ class PersonTracker:
 
         for camera in self.cameras:
             frames.append(camera.track_people(self.known_embeddings))
-
         return frames
 
     def start(self) -> NoReturn:
@@ -286,3 +330,284 @@ class PersonTracker:
                 cv2.imshow(f"stream {i}", frame_analysed)
                 if cv2.waitKey(1) & 0xFF == ord('q'):
                     raise KeyboardInterrupt("Fin du programme")
+
+
+class EnhancedPersonTracker:
+    def __init__(self, sources):
+        self.known_embeddings = {}
+        self.track_history = {}  # Track movement patterns
+        self.appearance_history = {}  # Store multiple appearances
+        self.sources: List[str] = sources
+        self.cameras: List[Camera] = []
+        for source in sources:
+            self.cameras.append(Camera(source, "osnet", self))
+
+    def update_track_history(self, track_id: int, box: Boxes, frame_idx: int, embedding: np.ndarray = None):
+        """
+        Met à jour l'historique d'un track avec informations temporelles et spatiales
+        """
+        if track_id not in self.track_history:
+            # Initialisation du track
+            self.track_history[track_id] = {
+                'first_seen': frame_idx,
+                'last_seen': frame_idx,
+                'positions': deque(maxlen=100),  # Dernières positions
+                'appearances': 0,  # Nombre total d'apparitions
+                'confidence_scores': deque(maxlen=50),
+                'embedding_history': deque(maxlen=20),  # Derniers embeddings
+                'active': True,
+                'color': colors[track_id],
+                'last_boxes': deque(maxlen=10)  # Dernières boîtes
+            }
+
+        # Mise à jour des informations
+        history = self.track_history[track_id]
+        x1, y1, x2, y2 = map(int, box.xyxy[0])
+        center_x = (x1 + x2) / 2
+        center_y = (y1 + y2) / 2
+
+        # Ajout des nouvelles données
+        history['positions'].append((center_x, center_y, frame_idx))
+        history['confidence_scores'].append(float(box.conf[0]))
+        history['last_boxes'].append(box.xyxy[0])
+        history['last_seen'] = frame_idx
+        history['appearances'] += 1
+
+        if embedding is not None:
+            history['embedding_history'].append(embedding)
+
+        # Calcul des statistiques en temps réel
+        self._calculate_track_stats(track_id)
+
+    def _calculate_track_stats(self, track_id: int):
+        """
+        Calcule les statistiques d'un track (vitesse, direction, etc.)
+        """
+        if track_id not in self.track_history:
+            return
+
+        history = self.track_history[track_id]
+        positions = list(history['positions'])
+
+        if len(positions) < 2:
+            return
+
+        # Calcul de la vitesse moyenne
+        recent_positions = positions[-5:]  # 5 dernières positions
+        speeds = []
+        directions = []
+
+        for i in range(1, len(recent_positions)):
+            x1, y1, t1 = recent_positions[i - 1]
+            x2, y2, t2 = recent_positions[i]
+
+            # Vitesse en pixels par frame
+            distance = np.sqrt((x2 - x1) ** 2 + (y2 - y1) ** 2)
+            time_diff = t2 - t1
+            speed = distance / time_diff if time_diff > 0 else 0
+            speeds.append(speed)
+
+            # Direction
+            if distance > 0:
+                direction = np.arctan2(y2 - y1, x2 - x1)
+                directions.append(direction)
+
+        # Mise à jour des statistiques
+        history['avg_speed'] = np.mean(speeds) if speeds else 0
+        history['max_speed'] = np.max(speeds) if speeds else 0
+        history['avg_direction'] = np.mean(directions) if directions else 0
+        history['track_length'] = len(positions)
+
+        # Calcul de la trajectoire prévue
+        if len(positions) >= 3:
+            self._predict_future_position(track_id)
+
+    def _predict_future_position(self, track_id: int):
+        """
+        Prédit la position future basée sur la trajectoire
+        """
+        history = self.track_history[track_id]
+        positions = list(history['positions'])[-5:]  # 5 dernières positions
+
+        if len(positions) < 3:
+            return
+
+        # Régression linéaire simple pour prédiction
+        x_coords = [p[0] for p in positions]
+        y_coords = [p[1] for p in positions]
+        frames = [p[2] for p in positions]
+
+        # Prédiction pour la frame suivante
+        if len(set(frames)) > 1:
+            try:
+                # Prédiction X
+                x_trend = np.polyfit(frames, x_coords, 1)
+                next_x = np.polyval(x_trend, frames[-1] + 1)
+
+                # Prédiction Y
+                y_trend = np.polyfit(frames, y_coords, 1)
+                next_y = np.polyval(y_trend, frames[-1] + 1)
+
+                history['predicted_position'] = (next_x, next_y)
+            except BaseException as _:
+                history['predicted_position'] = None
+
+    def update_tracking_logic(self, embed: np.ndarray, box: Boxes, frame_idx: int):
+        """Enhanced tracking with temporal consistency"""
+        # Add temporal filtering
+        matched_id = self.get_nearest_person_with_temporal(embed, box, frame_idx)
+
+        if matched_id:
+            self.update_track_history(matched_id, box, frame_idx)
+
+        return matched_id
+
+    def get_nearest_person_with_temporal(self, embed: np.ndarray, box: Boxes, frame_idx: int):
+        """Matching that considers temporal and spatial context"""
+        candidates = {}
+
+        for known_id, emb_list in self.known_embeddings.items():
+            # Check if this ID was recently seen
+            if known_id in self.track_history:
+                last_seen = self.track_history[known_id]['last_seen']
+                frames_since_seen = frame_idx - last_seen
+
+                # Adjust threshold based on time since last seen
+                temporal_factor = max(0.1, 1.0 - (frames_since_seen * 0.01))
+                adjusted_threshold = DISTANCE_THRESHOLD * temporal_factor
+            else:
+                adjusted_threshold = DISTANCE_THRESHOLD
+
+            # Calculate similarity
+            recent_embs = emb_list[-5:]  # Use most recent embeddings
+            similarities = [1 - cosine(embed, ref_emb) for ref_emb in recent_embs]
+            max_similarity = max(similarities) if similarities else 0
+
+            if max_similarity > (1 - adjusted_threshold):
+                candidates[known_id] = max_similarity
+
+        if candidates:
+            return max(candidates.items(), key=lambda x: x[1])[0]
+        return None
+
+    def get_track_info(self, track_id: int) -> Dict:
+        """
+        Retourne les informations d'un track spécifique
+        """
+        if track_id in self.track_history:
+            return self.track_history[track_id]
+        return {}
+
+    def get_active_tracks(self, current_frame: int, max_frames_missing: int = 30) -> List[int]:
+        """
+        Retourne la liste des tracks actifs (vus récemment)
+        """
+        active_tracks = []
+
+        for track_id, history in self.track_history.items():
+            frames_missing = current_frame - history['last_seen']
+            if frames_missing <= max_frames_missing and history['active']:
+                active_tracks.append(track_id)
+
+        return active_tracks
+
+    def cleanup_old_tracks(self, current_frame: int, max_age_frames: int = 100):
+        """
+        Nettoie les tracks trop anciens
+        :param max_age_frames:
+        :param current_frame:
+        :return:
+        """
+
+        tracks_to_remove = []
+
+        for track_id, history in self.track_history.items():
+            age = current_frame - history['last_seen']
+            if age > max_age_frames:
+                tracks_to_remove.append(track_id)
+
+        for track_id in tracks_to_remove:
+            del self.track_history[track_id]
+            # Optionnel: supprimer aussi les embeddings
+            if track_id in self.known_embeddings:
+                del self.known_embeddings[track_id]
+
+    def draw_track_history(self, frame: np.ndarray, track_id: int) -> np.ndarray:
+        """
+        Dessine l'historique du track sur la frame
+        """
+        if track_id not in self.track_history:
+            return frame
+
+        history = self.track_history[track_id]
+        positions = list(history['positions'])
+
+        # Dessiner la trajectoire
+        for i in range(1, len(positions)):
+            x1, y1, _ = positions[i - 1]
+            x2, y2, _ = positions[i]
+
+            # Couleur qui change avec le temps (plus récent = plus clair)
+            alpha = i / len(positions)
+            color = (
+                int(colors[track_id][0] * alpha),
+                int(colors[track_id][1] * alpha),
+                int(colors[track_id][2] * alpha)
+            )
+
+            cv2.line(frame, (int(x1), int(y1)), (int(x2), int(y2)), color, 2)
+
+        # Dessiner la position prédite
+        if 'predicted_position' in history and history['predicted_position']:
+            pred_x, pred_y = history['predicted_position']
+            cv2.circle(frame, (int(pred_x), int(pred_y)), 8, (0, 255, 255), -1)
+            cv2.putText(frame, "Fred", (int(pred_x), int(pred_y) - 10),
+                        cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 255), 1)
+
+        return frame
+
+
+class Camera:
+    def __init__(self, source: str, ai: str, tracker: EnhancedPersonTracker):
+        self.model = ai
+        self.source = source
+        self.cap = cv2.VideoCapture(source)
+        self.tracker = tracker  # Référence au tracker principal
+        self.frame_count = 0
+
+    def read(self):
+        return self.cap.read()
+
+    @chrono
+    def track_people(self, known_persons: Dict[int, List[np.ndarray]]) -> Optional[np.ndarray]:
+        ret, frame = self.read()
+        if not ret:
+            return None
+
+        height, width, _ = frame.shape
+        self.frame_count += 1
+
+        detections, boxes = generate_detections(frame)
+        embeds = generate_embeddings(frame, detections, self.model)
+        embeds = list(map(lambda embed: embed / np.linalg.norm(embed), embeds))
+
+        assigned_ids = []
+
+        for current_embedding, box in zip(embeds, boxes):
+            matched_id = get_nearest_person_improved(current_embedding, known_persons, assigned_ids)
+            label = process_id(current_embedding, matched_id, known_persons, assigned_ids)
+
+            # Mise à jour de l'historique
+            if matched_id:
+                self.tracker.update_track_history(matched_id, box, self.frame_count, current_embedding)
+
+                # Dessiner l'historique du track
+                # frame = self.tracker.draw_track_history(frame, matched_id)
+
+            frame = draw_rectangle(frame, box, label, matched_id)
+
+        # Nettoyage périodique des anciens tracks
+        if self.frame_count % 100 == 0:  # Toutes les 100 frames
+            self.tracker.cleanup_old_tracks(self.frame_count)
+
+        return frame

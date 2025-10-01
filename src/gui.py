@@ -1,13 +1,12 @@
 import sys
 from typing import List
 
-import cv2
-from PySide6 import QtCore, QtWidgets, QtGui
+from PySide6 import QtCore, QtWidgets
 from PySide6.QtGui import QImage, QPixmap
 import cv2
 import math
 
-from person_tracker import PersonTracker, Camera
+from person_tracker import EnhancedPersonTracker as PersonTracker, Camera
 
 
 class GUIApplication(QtWidgets.QWidget):
@@ -24,12 +23,12 @@ class GUIApplication(QtWidgets.QWidget):
             cam_widget.setLayout(cam_layout)
 
             img_label = QtWidgets.QLabel()
-            img_label.setFixedSize(1280, 768)
+            # img_label.setFixedWidth(1280)
+            img_label.setFixedSize(1280, 728)
             img_label.setStyleSheet("background-color: black;")
 
             caption = QtWidgets.QLabel(f"Camera : {camera.source}")
             caption.setAlignment(QtCore.Qt.AlignCenter)
-
             cam_layout.addWidget(img_label)
             cam_layout.addWidget(caption)
 
