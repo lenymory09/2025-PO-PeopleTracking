@@ -29,11 +29,27 @@ def connect_db():
         database="IA_DB"
     )
 
-def insert_personne_passage():
+# def insert_personne_passage():
+#     # Créer un curseur pour exécuter les requêtes
+#     cursor = conn.cursor()
+#     # Exemple : insérer une donnée
+#     cursor.execute("INSERT INTO personne (ID_personne) VALUES (24)")
+#     # Sauvegarder les changements
+#     conn.commit()
+
+def insert_personne_passage(ID_personne, ID_lieux):
     # Créer un curseur pour exécuter les requêtes
     cursor = conn.cursor()
-    # Exemple : insérer une donnée
-    cursor.execute("INSERT INTO personne (ID_personne) VALUES (23)")
+    
+    # Insérer la personne si elle n’existe pas déjà (facultatif, mais évite les erreurs de clé étrangère)
+    cursor.execute("INSERT IGNORE INTO personne (ID_personne) VALUES (%s)", (ID_personne,))
+    
+    # Insérer le passage dans la table visiter avec la date actuelle
+    cursor.execute("""
+        INSERT INTO visiter (ID_personne, ID_lieux, date_visite)
+        VALUES (%s, %s, NOW())
+    """, (ID_personne, ID_lieux))
+    
     # Sauvegarder les changements
     conn.commit()
 
@@ -46,5 +62,5 @@ def insert_personne_passage():
 
 def close_db():
     # Fermer le curseur et la connexion
-    cursor.close()
-    conn.close() 
+    cursor.close() 
+    conn.close()
