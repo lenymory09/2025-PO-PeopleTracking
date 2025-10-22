@@ -1,23 +1,3 @@
-# # utils.py
-
-# def dire_bonjour(nom: str) -> str:
-#     """Retourne un message de salutation personnalisé."""
-#     return f"Bonjour, {nom} !"
-
-# def addition(a: int, b: int) -> int:
-#     """Retourne la somme de deux nombres."""
-#     return a + b
-
-# def est_pair(nombre: int) -> bool:
-#     """Vérifie si un nombre est pair."""
-#     return nombre % 2 == 0
-
-# if __name__ == "__main__":
-#     # Cette partie ne s'exécute que si tu lances utils.py directement
-#     print(dire_bonjour("Test"))
-#     print("5 + 3 =", addition(5, 3))
-#     print("10 est pair ?", est_pair(10))
-
 import mysql.connector
 
 def connect_db():
@@ -29,20 +9,60 @@ def connect_db():
         database="IA_DB"
     )
 
-# def insert_personne_passage():
-#     # Créer un curseur pour exécuter les requêtes
-#     cursor = conn.cursor()
-#     # Exemple : insérer une donnée
-#     cursor.execute("INSERT INTO personne (ID_personne) VALUES (24)")
-#     # Sauvegarder les changements
-#     conn.commit()
+# créer la base de données
+def create_db():
+    # Créer un curseur pour exécuter les requêtes
+    conn = mysql.connector.connect(
+        host="localhost",      # ou l'IP de ton serveur MySQL
+        user="root",
+        password="Admlocal1"
+    )
+    cursor = conn.cursor()
+    
+    # créer la base de données
+    cursor.execute("""        
+                    -- Création de la base de données
+                    CREATE DATABASE IA_DB;
+                    USE IA_DB; 
+                        -- Création de la table personne
+                    CREATE TABLE personne (
+                        ID_pers INT AUTO_INCREMENT PRIMARY KEY,
+                        ID_personne INT NOT NULL UNIQUE
+                    );
 
+                    -- Création de la table lieux
+                    CREATE TABLE lieux (
+                        ID_lieux INT AUTO_INCREMENT PRIMARY KEY,
+                        lieux VARCHAR(50) NOT NULL
+                    );
+
+                    -- Création de la table visiter (relation N-N entre personne et lieux)
+                    CREATE TABLE visiter (
+                        ID_personne INT NOT NULL,
+                        ID_lieux INT NOT NULL,
+                        date_visite DATETIME NOT NULL DEFAULT NOW(),
+                        
+                        PRIMARY KEY (ID_personne, ID_lieux, date_visite),
+                        
+                        CONSTRAINT fk_visiter_personne FOREIGN KEY (ID_personne) REFERENCES personne(ID_pers)
+                            ON DELETE CASCADE
+                            ON UPDATE CASCADE,
+                        CONSTRAINT fk_visiter_lieux FOREIGN KEY (ID_lieux) REFERENCES lieux(ID_lieux)
+                            ON DELETE CASCADE
+                            ON UPDATE CASCADE
+                    );""")
+    # Sauvegarder les changements
+    conn.commit()
+    cursor.close() 
+    conn.close()
+
+# insérer une personne dans la base de données 
 def insert_personne_passage(ID_personne, ID_lieux):
     # Créer un curseur pour exécuter les requêtes
     cursor = conn.cursor()
     
-    # Insérer la personne si elle n’existe pas déjà (facultatif, mais évite les erreurs de clé étrangère)
-    cursor.execute("INSERT IGNORE INTO personne (ID_personne) VALUES (%s)", (ID_personne,))
+    # Insérer la personne
+    cursor.execute("INSERT INTO personne (ID_personne) VALUES (%s)", (ID_personne,))
     
     # Insérer le passage dans la table visiter avec la date actuelle
     cursor.execute("""
