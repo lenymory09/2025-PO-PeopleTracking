@@ -1,5 +1,6 @@
 import mysql.connector
 
+
 class DB:
     def __init__(self):
         self.connect_db()
@@ -86,6 +87,6 @@ class DB:
 
 
 def close_db(self):
-    # Fermer le curseur et la connexion
+    # Fermer le curseur et la connexion 
     self.cursor.close() 
     self.conn.close()
