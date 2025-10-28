@@ -3,6 +3,7 @@ import mysql.connector
 
 class DB:
     def __init__(self):
+        self.create_db()
         self.connect_db()
 
     # créer la base de données
@@ -61,7 +62,7 @@ class DB:
             password="Admlocal1",
             database="IA_DB"
         )
-        self.cursor = conn.cursor()
+        self.cursor = self.conn.cursor()
 
 
     # insérer une personne dans la base de données 
