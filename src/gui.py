@@ -10,14 +10,14 @@ from person_tracker import EnhancedPersonTracker as PersonTracker, Camera
 
 
 class GUIApplication(QtWidgets.QWidget):
-    def __init__(self, person_tracker: PersonTracker):
+    def __init__(self, config):
         super().__init__()
-        self.person_tracker = person_tracker
-        self.cameras: List[Camera] = person_tracker.cameras
+        self.person_tracker = PersonTracker(config)
+        self.cameras: List[Camera] = self.person_tracker.cameras
         self.labels = []
         self.layout = QtWidgets.QGridLayout(self)
 
-        for camera in person_tracker.cameras:
+        for camera in self.cameras:
             cam_widget = QtWidgets.QWidget()
             cam_layout = QtWidgets.QVBoxLayout()
             cam_widget.setLayout(cam_layout)
@@ -44,14 +44,14 @@ class GUIApplication(QtWidgets.QWidget):
     def update_frames(self):
         for cam, lbl in zip(self.cameras, self.labels):
             frame = cam.track_people()
+            if frame is not None:
+                frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+                h, w, ch = frame.shape
+                img = QImage(frame.data, w, h, ch * w, QImage.Format_RGB888)
 
-            frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-            h, w, ch = frame.shape
-            img = QImage(frame.data, w, h, ch * w, QImage.Format_RGB888)
-
-            lbl.setPixmap(QPixmap.fromImage(img).scaled(
-                lbl.width(), lbl.height()
-            ))
+                lbl.setPixmap(QPixmap.fromImage(img).scaled(
+                    lbl.width(), lbl.height()
+                ))
 
     def resizeEvent(self, event):
         # impose le ratio 16:9
