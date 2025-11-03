@@ -10,7 +10,8 @@ import time
 
 from PySide6.QtWidgets import QLabel
 
-from person_tracker import EnhancedPersonTracker as PersonTracker, Camera
+from person_tracker import EnhancedPersonTracker as PersonTracker
+from video_processing import Camera
 from app_gui import Ui_MainWindow
 import queue
 
@@ -18,7 +19,9 @@ class GUIApp(QtWidgets.QMainWindow, Ui_MainWindow):
     def __init__(self, config):
         super().__init__()
         self.person_tracker = PersonTracker(config)
-        self.cameras: List[Camera] = self.person_tracker.cameras
+        self.cameras: List[Camera] = []
+        for idx, source in enumerate(config['video']['sources']):
+            self.cameras.append(Camera(source, self.person_tracker, config, idx))
         self.setupUi(self)
         self.cameras_labels = self.horizontalLayoutWidget.findChildren(QLabel)
         print("labels:", self.cameras_labels)
@@ -99,7 +102,9 @@ class GUIApplication(QtWidgets.QWidget):
     def __init__(self, config):
         super().__init__()
         self.person_tracker = PersonTracker(config)
-        self.cameras: List[Camera] = self.person_tracker.cameras
+        self.cameras: List[Camera] = []
+        for idx, source in enumerate(config['video']['sources']):
+            self.cameras.append(Camera(source, self, config, idx))
         self.labels = []
         self.layout = QtWidgets.QGridLayout(self)
 

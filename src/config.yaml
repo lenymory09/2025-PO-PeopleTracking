@@ -23,6 +23,7 @@ tracker:
   n_init: 2
   max_cosine_distance: 0.4
   nn_budget: 50
+  model: "models/mars-small128.pb"
 
 # Detection Parameters
 detection:
