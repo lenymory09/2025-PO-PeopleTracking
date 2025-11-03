@@ -64,6 +64,15 @@ class DB:
         )
         self.cursor = self.conn.cursor()
 
+    # insérer une les lieux dans la base de données 
+    def fill_DB(self):
+        # Insérer les lieux dans la DB
+        self.cursor.execute("INSERT INTO personne (ID_lieux, lieux) VALUES (1, stand)",)
+        self.cursor.execute("INSERT INTO personne (ID_lieux, lieux) VALUES (2, porte)",)
+        
+        # Sauvegarder les changements
+        self.conn.commit()
+
 
     # insérer une personne dans la base de données 
     def insert_personne_passage(self, ID_personne, ID_lieux):
