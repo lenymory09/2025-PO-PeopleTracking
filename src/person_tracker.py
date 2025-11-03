@@ -1,3 +1,5 @@
+import queue
+import time
 from collections import deque
 import cv2
 import random
@@ -12,7 +14,9 @@ from scipy.spatial.distance import cosine
 from typing import Dict, List, Optional, Tuple
 import os
 from PIL import Image
-from utils import extract_image_patch, euclidean_distance
+from utils import extract_image_patch, euclidean_distance, draw_person_box
+from queue import Queue
+import threading
 
 torch.set_num_threads(os.cpu_count())
 
@@ -115,23 +119,6 @@ def is_correct_box(box: Boxes, width: int) -> bool:
     return bool(x1 > 50 and x2 < width - 50 and box.conf[0] > 0.7) and is_inside_frame  # and is_dimensions_correct
 
 
-def draw_rectangle(f: np.ndarray, box: Boxes, label: str, person_id: int) -> np.ndarray:
-    """
-    Draw the rectangle and the ids in the image.
-    :param f: Frame to draw onto.
-    :param box: Box of the person
-    :param label: Label of the person (ID and nb embeddings)
-    :param person_id:
-    :return:
-    """
-    x1, y1, x2, y2 = map(int, box.xyxy[0])
-    cv2.rectangle(f, (x1, y1), (x2, y2), colors[person_id if person_id is not None else 0], 2)
-    cv2.putText(f, label, (x1, y1 - 10), cv2.FONT_ITALIC, 0.7,
-                colors[person_id if person_id is not None else 0], 2)
-
-    return f
-
-
 class EnhancedPersonTracker:
     def __init__(self, config):
         self.tracked_persons = {}
@@ -144,8 +131,8 @@ class EnhancedPersonTracker:
         self.max_gallery_size = config['reid']['max_gallery_size']
         self.temporal_frames = config['reid']['temporal_frames']
         self.threshold_reid = config['reid']['threshold']
-        for source in self.sources:
-            self.cameras.append(Camera(source, self, config))
+        for idx, source in enumerate(self.sources):
+            self.cameras.append(Camera(source, self, config, idx))
         self.device = torch.device(config['reid']['device'])
 
         self.transform = transforms.Compose([
@@ -155,7 +142,8 @@ class EnhancedPersonTracker:
                                  std=config['reid']['norm_std'])
         ])
 
-        model_name = config['models']['reid_gpu'] if config['reid']['device'] in ["cuda", "mps"] else config['models']['reid_cpu']
+        model_name = config['models']['reid_gpu'] if config['reid']['device'] in ["cuda", "mps"] else config['models'][
+            'reid_cpu']
 
         self.reid_model = torchreid.models.build_model(
             name=model_name,
@@ -169,6 +157,8 @@ class EnhancedPersonTracker:
             torchreid.utils.load_pretrained_weights(self.reid_model, 'models/osnet_ain_market1501_60.pth')
 
         self.reid_model.eval()
+
+        self.lock = threading.Lock()
 
         # self.feature_extractor = FeatureExtractor("resnet50", "models/resnet50_market.pth.tar-60", verbose=False, device="cpu")
 
@@ -232,7 +222,7 @@ class EnhancedPersonTracker:
         # Calcul des statistiques en temps réel
         self._calculate_track_stats(track_id)
 
-    def get_nearest_person_improved(self, embed: np.ndarray, assigned_ids: List[int]):
+    def match_person(self, embed: np.ndarray, assigned_ids: List[int]):
         matched_id = None
         best_score = float('inf')
         # print(self.tracked_persons)
@@ -255,6 +245,13 @@ class EnhancedPersonTracker:
             if score < self.threshold_reid and score < best_score:
                 best_score = score
                 matched_id = known_id
+
+        if matched_id is None:
+            matched_id = self.create_id(embed)
+        else:
+            self.update_gallery(matched_id, embed)
+
+        assigned_ids.append(matched_id)
 
         return matched_id
 
@@ -522,9 +519,22 @@ class EnhancedPersonTracker:
         norms = np.linalg.norm(feats, axis=1, keepdims=True) + 1e-12
         return feats / norms
 
+    def calc_nb_persons(self):
+        return len(self.tracked_persons)
+
+    def generate_label(self, pid: int) -> str:
+        """
+        Generate the label for the person Box
+        :param pid: Person ID
+        :return: the label generated
+        """
+        nb_embeddings = len(self.tracked_persons[pid]['features'])
+        label = f"ID {pid} : {'Max' if nb_embeddings == self.max_gallery_size else nb_embeddings}"
+        return label
 
 class Camera:
-    def __init__(self, source: str, reid: EnhancedPersonTracker, config):
+    def __init__(self, source: str, reid: EnhancedPersonTracker, config, vid_idx):
+        self.running = False
         self.source = source
         self.cap = cv2.VideoCapture(source)
         self.reid = reid
@@ -538,6 +548,8 @@ class Camera:
         self.detection_config = config['detection']
         self.track_id_to_pid: Dict[int, int] = {}
         self.yolo = YOLO(config['models']['yolo'])
+        self.frame_queue: Optional[Queue] = None
+        self.vid_idx = vid_idx
 
     def generate_detections(self, frame: np.ndarray) -> Tuple[List[Tuple], List[Boxes]]:
         """
@@ -547,7 +559,9 @@ class Camera:
         """
         _, frame_width, _ = frame.shape
 
-        results = self.yolo(frame, classes=[self.detection_config['person_class_id']], device=self.detection_config['device'], conf=self.detection_config['confidence_threshold'], iou=0.5, verbose=False)[0]
+        results = \
+        self.yolo(frame, classes=[self.detection_config['person_class_id']], device=self.detection_config['device'],
+                  conf=self.detection_config['confidence_threshold'], iou=0.5, verbose=False)[0]
         detections = []
         boxes = results.boxes
         # boxes = filter_boxes_by_dimensions(boxes, frame_width)
@@ -562,7 +576,7 @@ class Camera:
         return detections, boxes
 
     def process_id(self, embed: np.ndarray, matched_id: Optional[int],
-                   assigned_ids: List[int]) -> str:
+                   assigned_ids: List[int]) -> int:
         """
         Save the id in the known_person or create it and add it to the assigned_ids
         :param embed: person description
@@ -570,30 +584,16 @@ class Camera:
         :param assigned_ids: List of assigned IDs
         :return: the label of the box
         """
+        # self.reid.tracked_persons[matched_id].append(embed)
 
-        if matched_id:
-            self.reid.update_gallery(matched_id, embed)
-            # self.reid.tracked_persons[matched_id].append(embed)
-
-            # if len(self.tracker.tracked_persons[matched_id]) > MAX_DESCRIPTION_NUMBER:
-            #    self.tracker.tracked_persons[matched_id].pop(0)
-
-            nb_embeddings = len(self.reid.tracked_persons[matched_id]['features'])
-
-            label = f"ID {matched_id} : {'Max' if nb_embeddings == self.reid.max_gallery_size else nb_embeddings}"
-        else:
-            matched_id = self.reid.create_id(embed)
-            label = f"New ID {matched_id}"
-            # self.tracker.tracked_persons[matched_id] = [embed]
-
-        assigned_ids.append(matched_id)
-        return label
+        # if len(self.tracker.tracked_persons[matched_id]) > MAX_DESCRIPTION_NUMBER:
+        #    self.tracker.tracked_persons[matched_id].pop(0)
 
     def read(self):
         return self.cap.read()
 
     # @chrono
-    def track_people(self) -> Optional[np.ndarray]:
+    def process_frame(self) -> Optional[np.ndarray]:
         ret, frame = self.read()
         if not ret:
             return None
@@ -624,9 +624,9 @@ class Camera:
         assigned_ids = []
 
         for current_embedding, box in zip(embeds, boxes):
-            matched_id = self.reid.get_nearest_person_improved(current_embedding, assigned_ids)
-            label = self.process_id(current_embedding, matched_id, assigned_ids)
-
+            pid = self.reid.match_person(current_embedding, assigned_ids)
+            label = self.reid.generate_label(pid)
+            color = self.reid.tracked_persons[pid]['color']
             # Mise à jour de l'historique
             # if matched_id:
             # self.tracker.update_track_history(matched_id, box, self.frame_count, current_embedding)
@@ -634,10 +634,43 @@ class Camera:
             # Dessiner l'historique du track
             # frame = self.tracker.draw_track_history(frame, matched_id)
 
-            draw_rectangle(frame, box, label, matched_id)
+            draw_person_box(frame, box.xyxy[0], label, color)
 
         # Nettoyage périodique des anciens tracks
         if self.frame_count % 100 == 0:  # Toutes les 100 frames
             self.reid.cleanup_old_tracks(self.frame_count)
 
         return frame
+
+    def run(self):
+        try:
+            self.running = True
+            fps = self.cap.get(cv2.CAP_PROP_FPS)
+            frame_interval = max(0.001, 1 / fps) if fps > 0 else 0.033
+
+            # Main processing loop
+            while self.running and self.cap.isOpened():
+                start_time = time.time()
+                ret, frame = self.cap.read()
+                if not ret:
+                    break
+
+                processed = self.process_frame()
+
+                # Send frame to UI
+                try:
+                    self.frame_queue.put_nowait((self.vid_idx, processed))
+                except queue.Full:
+                    pass
+
+                # Control frame rate
+                elapsed = time.time() - start_time
+                sleep_time = max(0.0, frame_interval - elapsed)
+                time.sleep(sleep_time)
+
+        except Exception as e:
+            print(f"Processor {self.source} crashed: {e}")
+
+        finally:
+            # Make sure resources are always released
+            print(f"Processor {self.source} exited")

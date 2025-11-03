@@ -7,7 +7,7 @@ from PySide6 import QtWidgets
 
 from person_tracker import EnhancedPersonTracker as PersonTracker
 from utils import parse_source
-from gui import GUIApplication
+from gui import GUIApplication, GUIApp
 
 def load_config():
     with open('config.yaml', 'r') as file:
@@ -20,13 +20,15 @@ def parse_args():
 
 
 def main():
+    # TODO rajouter des threading.Lock() dans reid
     #args = parse_args()
     app = QtWidgets.QApplication([])
     app.setApplicationName("Person Tracker")
     main_config = load_config()
-    gui_app = GUIApplication(main_config)
-
+    # gui_app = GUIApplication(main_config)
+    gui_app = GUIApp(main_config)
     gui_app.show()
+    gui_app.start_processing()
     sys.exit(app.exec())
 
 
