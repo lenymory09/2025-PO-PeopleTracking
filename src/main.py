@@ -20,7 +20,6 @@ def parse_args():
 
 
 def main():
-    # TODO rajouter des threading.Lock() dans reid
     #args = parse_args()
     app = QtWidgets.QApplication([])
     app.setApplicationName("Person Tracker")

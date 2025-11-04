@@ -19,10 +19,12 @@ from deep_sort.tools import generate_detections as gdet
 from deep_sort.deep_sort import nn_matching
 from deep_sort.deep_sort.detection import Detection
 
+
 class Track:
-    def __init__(self, track_id, bbox):
+    def __init__(self, track_id, bbox, features):
         self.track_id = track_id
         self.bbox = bbox
+        self.features = features
 
 
 class DeepSortWrapper:
@@ -30,7 +32,7 @@ class DeepSortWrapper:
         metric = nn_matching.NearestNeighborDistanceMetric("cosine", max_cosine_distance, nn_budget)
         self.tracker = DeepSortTracker(metric)
         self.encoder = gdet.create_box_encoder(model_filename, batch_size=1)
-        self.tracks = []
+        self.tracks: List[Track] = []
 
     def update(self, frame, detections):
 
@@ -66,7 +68,8 @@ class DeepSortWrapper:
                 continue
             bbox = track.to_tlbr()  # returns [x1, y1, x2, y2]
             track_id = track.track_id
-            active_tracks.append(Track(track_id, bbox))
+            features = track.features
+            active_tracks.append(Track(track_id, bbox, features))
 
         self.tracks = active_tracks
 
@@ -85,10 +88,11 @@ class Camera:
             nn_budget=config['tracker']['nn_budget'],
         )
         self.detection_config = config['detection']
-        self.track_id_to_pid: Dict[int, int] = {}
         self.yolo = YOLO(config['models']['yolo'])
         self.frame_queue: Optional[Queue] = None
         self.vid_idx = vid_idx
+        self.ultracking = DeepSortWrapper(config['tracker']['model'])
+        self.ultrackid_to_pid: Dict[int, int] = {}
 
     def generate_detections(self, frame: np.ndarray) -> Tuple[List[Tuple], List[Boxes]]:
         """
@@ -111,11 +115,19 @@ class Camera:
             conf = float(box.conf[0])
             cls_id = int(box.cls[0])
             # Format: ([left, top, width, height], confidence, class_id)
-            detections.append(([x1, y1, x2 - x1, y2 - y1], conf, cls_id))
+            # detections.append(([x1, y1, x2 - x1, y2 - y1], conf, cls_id))
+            detections.append([x1, y1, x2, y2, conf])
         return detections, boxes
 
     def read(self):
         return self.cap.read()
+
+    def generate_crops(self, frame: np.ndarray, bboxes: Tuple[int, int, int, int]) -> List[np.ndarray]:
+        crops = []
+        for (l, t, r, b) in bboxes:
+            crops.append(frame[l:r, t:b])
+
+        return crops
 
     # @chrono
     def process_frame(self) -> Optional[np.ndarray]:
@@ -127,6 +139,49 @@ class Camera:
         self.frame_count += 1
 
         detections, boxes = self.generate_detections(frame)
+
+        self.ultracking.update(frame, detections)
+        tracks = self.ultracking.tracks
+        bboxes = []
+        crops = []
+
+        for trk in tracks:
+            l, t, r, b = map(int, trk.bbox)
+            # if (r - l) > 10 and (b - t) > 10:
+            bboxes.append((l, t, r, b))
+            crops.append(frame[t:b, l:r])
+
+        assigned_ids = []
+
+        features = self.reid.generate_embeddings(frame, bboxes)
+        for track, feat in zip(tracks, features):
+            if track.track_id in self.ultrackid_to_pid:
+                pid = self.ultrackid_to_pid[track.track_id]
+                assigned_ids.append(pid)
+
+                # if len(track.features) > 0:
+                #print("track trouvé")
+                # embed = np.vstack(track.features).mean(axis=0)  # Moyenne sur tous les features
+                # embed = embed.flatten()  # IMPORTANT: flatten() retourne une nouvelle array
+                self.reid.update_gallery(pid, feat)
+            else:
+                # Pour les nouveaux tracks, utiliser le premier feature
+                # embed = np.array(track.features[0])  # Premier feature seulement
+                # embed = embed.flatten()  # S'assurer que c'est 1-D
+
+                pid = self.reid.match_person(feat, assigned_ids)
+
+                self.ultrackid_to_pid[track.track_id] = pid
+
+            # Dessiner la boîte seulement si on a un PID valide
+            if pid is not None:
+                label = self.reid.generate_label(pid)
+                color = self.reid.tracked_persons[pid]['color']
+                draw_person_box(frame, track.bbox, label, color)
+            else:
+                # Fallback pour debugging
+                print(f"Track {track.track_id} n'a pas de PID assigné")
+                draw_person_box(frame, track.bbox, "Unknown", (0, 0, 255))
 
         # tracks = self.tracker.update_tracks(detections, frame=frame)
         # bboxes = []
@@ -143,48 +198,49 @@ class Camera:
 
         # if crops:
         # embeds = self.reid.extract_features(crops).tolist()
-        embeds = self.reid.generate_embeddings(frame, detections)
+        # embeds = self.reid.generate_embeddings(frame, detections)
         # embeds = list(map(lambda embed: embed / np.linalg.norm(embed), embeds))
 
-        assigned_ids = []
-
-        for current_embedding, box in zip(embeds, boxes):
-            pid = self.reid.match_person(current_embedding, assigned_ids)
-            label = self.reid.generate_label(pid)
-            color = self.reid.tracked_persons[pid]['color']
-            draw_person_box(frame, box.xyxy[0], label, color)
+        # assigned_ids = []
+        #
+        # for current_embedding, box in zip(embeds, boxes):
+        #     pid = self.reid.match_person(current_embedding, assigned_ids)
+        #     label = self.reid.generate_label(pid)
+        #     color = self.reid.tracked_persons[pid]['color']
+        #     draw_person_box(frame, box.xyxy[0], label, color)
 
         return frame
 
+
     def run(self):
-        try:
-            self.running = True
-            fps = self.cap.get(cv2.CAP_PROP_FPS)
-            frame_interval = max(0.001, 1 / fps) if fps > 0 else 0.033
+        # try:
+        self.running = True
+        fps = self.cap.get(cv2.CAP_PROP_FPS)
+        frame_interval = max(0.001, 1 / fps) if fps > 0 else 0.033
 
-            # Main processing loop
-            while self.running and self.cap.isOpened():
-                start_time = time.time()
-                ret, frame = self.cap.read()
-                if not ret:
-                    break
+        # Main processing loop
+        while self.running and self.cap.isOpened():
+            start_time = time.time()
+            ret, frame = self.cap.read()
+            if not ret:
+                break
 
-                processed = self.process_frame()
+            processed = self.process_frame()
 
-                # Send frame to UI
-                try:
-                    self.frame_queue.put_nowait((self.vid_idx, processed))
-                except queue.Full:
-                    pass
+            # Send frame to UI
+            try:
+                self.frame_queue.put_nowait((self.vid_idx, processed))
+            except queue.Full:
+                pass
 
-                # Control frame rate
-                elapsed = time.time() - start_time
-                sleep_time = max(0.0, frame_interval - elapsed)
-                time.sleep(sleep_time)
+            # Control frame rate
+            elapsed = time.time() - start_time
+            sleep_time = max(0.0, frame_interval - elapsed)
+            time.sleep(sleep_time)
 
-        except Exception as e:
-            print(f"Processor {self.source} crashed: {e}")
+    # except Exception as e:
+    #     print(f"Processor {self.source} crashed: {e}")
 
-        finally:
-            # Make sure resources are always released
-            print(f"Processor {self.source} exited")
+    # finally:
+    #     # Make sure resources are always released
+    #     print(f"Processor {self.source} exited")

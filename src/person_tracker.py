@@ -108,7 +108,7 @@ def is_correct_box(box: Boxes, width: int) -> bool:
             0 <= x1 < width and
             0 <= x2 <= width
     )
-    return bool(x1 > 50 and x2 < width - 50 and box.conf[0] > 0.7) and is_inside_frame  # and is_dimensions_correct
+    return bool(x1 > 50 and x2 < width - 50 and box.conf[0] > 0.75) and is_inside_frame  # and is_dimensions_correct
 
 
 class EnhancedPersonTracker:
@@ -183,7 +183,6 @@ class EnhancedPersonTracker:
                 person_embed = person['features'].mean(0)
                 if known_id in assigned_ids:
                     continue
-
                 # Use multiple reference embeddings for comparison
                 # scores = []
                 # for ref_emb in emb_list[-20:]:  # Use recent embeddings
@@ -217,9 +216,9 @@ class EnhancedPersonTracker:
 
     def extract_embedding(self, img: np.ndarray, box: Tuple):
         """Improved embedding extraction with preprocessing"""
-        # x1, y1, x2, y2 = map(int, box)
-        x1, y1, width, height = map(int, box[0])
-        x2, y2 = x1 + width, y1 + height
+        x1, y1, x2, y2 = map(int, box)
+        # x1, y1, width, height = map(int, box)
+        # x2, y2 = x1 + width, y1 + height
 
         # Expand box slightly for better context
         padding = 10
@@ -257,7 +256,7 @@ class EnhancedPersonTracker:
         avg_embedding = np.mean(embeddings, axis=0)
         return avg_embedding / np.linalg.norm(avg_embedding)  # L2 normalize
 
-    def extract_features(self, bgr_imgs):
+    def extract_features(self, bgr_imgs) -> np.ndarray:
         batch = []
         for img in bgr_imgs:
             img_rgb = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
