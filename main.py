@@ -2,7 +2,7 @@ import argparse
 import sys
 import yaml
 from PySide6 import QtWidgets
-
+from DB import DB
 from gui import GUIApp
 
 def load_config():
