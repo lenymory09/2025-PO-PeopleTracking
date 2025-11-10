@@ -9,7 +9,7 @@ def chrono(fn):
     def wrapper(*args):
         before = time()
         result = fn(*args)
-        # print(fn.__name__, ":", time() - before, "s")
+        print(fn.__name__, ":", time() - before, "s")
         return result
 
     return wrapper

@@ -15,6 +15,7 @@ from video_processing import Camera
 from app_gui import Ui_MainWindow
 import queue
 
+
 class GUIApp(QtWidgets.QMainWindow, Ui_MainWindow):
     def __init__(self, config):
         super().__init__()
@@ -23,7 +24,7 @@ class GUIApp(QtWidgets.QMainWindow, Ui_MainWindow):
         for idx, source in enumerate(config['video']['sources']):
             self.cameras.append(Camera(source, self.person_tracker, config, idx))
         self.setupUi(self)
-        self.cameras_labels = self.horizontalLayoutWidget.findChildren(QLabel)
+        self.cameras_labels = self.centralwidget.findChildren(QLabel)
         print("labels:", self.cameras_labels)
         self.running = False
         self.processors = []
@@ -53,7 +54,7 @@ class GUIApp(QtWidgets.QMainWindow, Ui_MainWindow):
 
     @QtCore.Slot()
     def update_nombre_personnes(self):
-        self.nombres_personnes_label.setText(str(self.person_tracker.calc_nb_persons()))
+        self.nombres_personnes_label.setText(f"∼ {self.person_tracker.calc_nb_persons()}")
 
     # @QtCore.Slot()
     # def update_frames(self):
@@ -97,76 +98,12 @@ class GUIApp(QtWidgets.QMainWindow, Ui_MainWindow):
             else:
                 time.sleep(0.001)
 
-
-class GUIApplication(QtWidgets.QWidget):
-    def __init__(self, config):
-        super().__init__()
-        self.person_tracker = PersonTracker(config)
-        self.cameras: List[Camera] = []
-        for idx, source in enumerate(config['video']['sources']):
-            self.cameras.append(Camera(source, self, config, idx))
-        self.labels = []
-        self.layout = QtWidgets.QGridLayout(self)
-
-        for camera in self.cameras:
-            cam_widget = QtWidgets.QWidget()
-            cam_layout = QtWidgets.QVBoxLayout()
-            cam_widget.setLayout(cam_layout)
-
-            img_label = QtWidgets.QLabel()
-            # img_label.setFixedWidth(1280)
-            img_label.setFixedSize(1280, 728)
-            img_label.setStyleSheet("background-color: black;")
-
-            caption = QtWidgets.QLabel(f"Camera : {camera.source}")
-            caption.setAlignment(QtCore.Qt.AlignCenter)
-            cam_layout.addWidget(img_label)
-            cam_layout.addWidget(caption)
-
-            self.layout.addWidget(cam_widget)
-            self.labels.append(img_label)
-
-        self._update_grid()
-        self.timer = QtCore.QTimer(self)
-        self.timer.timeout.connect(self.update_frames)
-        self.timer.start(30)
-
-    @QtCore.Slot()
-    def update_frames(self):
-        for cam, lbl in zip(self.cameras, self.labels):
-            frame = cam.process_frame()
-            if frame is not None:
-                frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-                h, w, ch = frame.shape
-                img = QImage(frame.data, w, h, ch * w, QImage.Format_RGB888)
-
-                lbl.setPixmap(QPixmap.fromImage(img).scaled(
-                    lbl.width(), lbl.height()
-                ))
-
     def resizeEvent(self, event):
         # impose le ratio 16:9
-        w = event.size().width()
-        h = int(w * 9 / 16)  # calcule la hauteur
-        self.resize(w, h)
-
-    def _update_grid(self):
-        # vider le layout existant
-        for i in reversed(range(self.layout.count())):
-            widget = self.layout.itemAt(i).widget()
-            self.layout.removeWidget(widget)
-
-        n = len(self.labels)
-        cols = math.ceil(math.sqrt(n))  # nombre de colonnes
-        rows = math.ceil(n / cols)  # nombre de lignes
-
-        idx = 0
-        for r in range(rows):
-            for c in range(cols):
-                if idx < n:
-                    self.layout.addWidget(self.labels[idx], r, c)
-                    idx += 1
-
+        pass
+        # w = event.size().width()
+        # h = int(w * 9 / 16)  # calcule la hauteur
+        # self.resize(w, h)
 
 if __name__ == "__main__":
     app = QtWidgets.QApplication([])
