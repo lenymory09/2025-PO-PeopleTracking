@@ -5,14 +5,13 @@ from typing import List, Optional
 from PySide6 import QtCore, QtWidgets
 from PySide6.QtGui import QImage, QPixmap
 import cv2
-import math
 import time
 
 from PySide6.QtWidgets import QLabel
 
-from person_tracker import EnhancedPersonTracker as PersonTracker
-from video_processing import Camera
-from app_gui import Ui_MainWindow
+from reid import EnhancedPersonTracker as PersonTracker
+from tracking import Camera
+from .app_gui import Ui_MainWindow
 import queue
 
 

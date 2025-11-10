@@ -11,15 +11,14 @@ from queue import Queue
 
 from ultralytics.engine.results import Boxes
 
-from person_tracker import EnhancedPersonTracker
-from deep_sort.tools.generate_detections import extract_image_patch
+from reid import EnhancedPersonTracker
+from .deep_sort.deep_sort.detection import Detection
+from .deep_sort.tools.generate_detections import extract_image_patch
 from utils import draw_person_box, chrono
 
-from deep_sort.deep_sort.tracker import Tracker as DeepSortTracker
-from deep_sort.tools import generate_detections as gdet
-from deep_sort.deep_sort import nn_matching
-from deep_sort.deep_sort.detection import Detection
-
+from tracking.deep_sort.deep_sort.tracker import Tracker as DeepSortTracker
+from tracking.deep_sort.tools import generate_detections as gdet
+from tracking.deep_sort.deep_sort import nn_matching
 
 def filter_boxes_by_dimensions(boxes: List[Boxes], width: int) -> List[Boxes]:
     return list(filter(lambda box: is_correct_box(box, width), boxes))
@@ -151,12 +150,12 @@ class Camera:
         self.cap = cv2.VideoCapture(source)
         self.reid = reid
         self.frame_count = 0
-        self.tracker = DeepSort(
-            max_age=config['tracker']['max_age'],
-            n_init=config['tracker']['n_init'],
-            max_cosine_distance=config['tracker']['max_cosine_distance'],
-            nn_budget=config['tracker']['nn_budget'],
-        )
+        # self.tracker = DeepSort(
+        #     max_age=config['tracker']['max_age'],
+        #     n_init=config['tracker']['n_init'],
+        #     max_cosine_distance=config['tracker']['max_cosine_distance'],
+        #     nn_budget=config['tracker']['nn_budget'],
+        # )
         self.detection_config = config['detection']
         self.yolo = YOLO(config['models']['yolo'])
         self.frame_queue: Optional[Queue] = None
