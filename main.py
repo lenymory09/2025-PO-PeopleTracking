@@ -3,7 +3,7 @@ import sys
 import yaml
 from PySide6 import QtWidgets
 
-from gui.gui import GUIApp
+from gui import GUIApp
 
 def load_config():
     with open('config.yaml', 'r') as file:

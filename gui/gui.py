@@ -9,9 +9,9 @@ import time
 
 from PySide6.QtWidgets import QLabel
 
-from reid.person_tracker import EnhancedPersonTracker as PersonTracker
-from tracking.video_processing import Camera
-from app_gui import Ui_MainWindow
+from reid import EnhancedPersonTracker as PersonTracker
+from tracking import Camera
+from .app_gui import Ui_MainWindow
 import queue
 
 

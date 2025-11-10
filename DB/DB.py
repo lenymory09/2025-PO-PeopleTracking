@@ -88,6 +88,11 @@ class DB:
         # Sauvegarder les changements
         self.conn.commit()
 
+    def close_db(self):
+        # Fermer le curseur et la connexion
+        self.cursor.close()
+        self.conn.close()
+
 # # Exemple : lire des données
 # cursor.execute("SELECT * FROM users")
 # rows = cursor.fetchall()
@@ -96,7 +101,3 @@ class DB:
 #     print(row)
 
 
-def close_db(self):
-    # Fermer le curseur et la connexion 
-    self.cursor.close() 
-    self.conn.close()
