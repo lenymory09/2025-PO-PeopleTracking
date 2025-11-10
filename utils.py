@@ -2,7 +2,6 @@ from time import time
 from typing import List, Tuple
 import numpy as np
 import cv2
-from ultralytics.engine.results import Boxes
 
 
 def chrono(fn):

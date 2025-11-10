@@ -12,13 +12,13 @@ from queue import Queue
 from ultralytics.engine.results import Boxes
 
 from person_tracker import EnhancedPersonTracker
-from deep_sort.tools.generate_detections import extract_image_patch
+from tracking.deep_sort.tools.generate_detections import extract_image_patch
 from utils import draw_person_box, chrono
 
-from deep_sort.deep_sort.tracker import Tracker as DeepSortTracker
-from deep_sort.tools import generate_detections as gdet
-from deep_sort.deep_sort import nn_matching
-from deep_sort.deep_sort.detection import Detection
+from tracking.deep_sort.deep_sort.tracker import Tracker as DeepSortTracker
+from tracking.deep_sort.tools import generate_detections as gdet
+from tracking.deep_sort.deep_sort import nn_matching
+from tracking.deep_sort.deep_sort import Detection
 
 
 def filter_boxes_by_dimensions(boxes: List[Boxes], width: int) -> List[Boxes]:
