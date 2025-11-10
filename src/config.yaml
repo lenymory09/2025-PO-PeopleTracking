@@ -1,6 +1,6 @@
 # Model Configuration
 models:
-  yolo: 'yolov8n.pt'
+  yolo: 'models/yolov8n.pt'
   reid_gpu: 'resnet50'
   reid_cpu: 'osnet_ain_x1_0'
   reid_num_classes: 1501
@@ -8,7 +8,7 @@ models:
 # ReID Parameters
 reid:
   alpha: 0.3
-  threshold: 0.6
+  threshold: 0.4
   temporal_frames: 3
   max_gallery_size: 512
   height: 256
@@ -23,6 +23,7 @@ tracker:
   n_init: 2
   max_cosine_distance: 0.4
   nn_budget: 50
+  model: "models/market1501.pb"
 
 # Detection Parameters
 detection:
