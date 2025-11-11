@@ -13,6 +13,7 @@ from reid import EnhancedPersonTracker as PersonTracker
 from tracking import Camera
 from .app_gui import Ui_MainWindow
 import queue
+from DB import DB
 
 
 class GUIApp(QtWidgets.QMainWindow, Ui_MainWindow):
@@ -29,6 +30,8 @@ class GUIApp(QtWidgets.QMainWindow, Ui_MainWindow):
         self.processors = []
         self.frame_queues = {}
         self.update_thread: Optional[threading.Thread] = None
+        self.save_persons_thread: Optional[threading.Thread] = None
+        self.db = DB()
 
     def start_processing(self):
         # self.timer = QtCore.QTimer(self)
@@ -51,9 +54,18 @@ class GUIApp(QtWidgets.QMainWindow, Ui_MainWindow):
         self.update_thread = threading.Thread(target=self.update_frames, daemon=True)
         self.update_thread.start()
 
+        self.save_persons = QtCore.QTimer(self)
+        self.save_persons.timeout.connect(self.save_persons_confirmed)
+        self.save_persons.setInterval(1000 * 15)
+        self.save_persons.start()
+
     @QtCore.Slot()
     def update_nombre_personnes(self):
         self.nombres_personnes_label.setText(f"∼ {self.person_tracker.calc_nb_persons()}")
+
+    def save_persons_confirmed(self):
+        persons = self.person_tracker.get_confirmed_persons()
+        self.db.insert_visites(persons)
 
     # @QtCore.Slot()
     # def update_frames(self):
@@ -103,6 +115,7 @@ class GUIApp(QtWidgets.QMainWindow, Ui_MainWindow):
         # w = event.size().width()
         # h = int(w * 9 / 16)  # calcule la hauteur
         # self.resize(w, h)
+
 
 if __name__ == "__main__":
     app = QtWidgets.QApplication([])

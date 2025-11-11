@@ -1,16 +1,17 @@
+import datetime
+
 import cv2
-import random
 import numpy as np
 import torch
 import torchreid
 from torchvision import transforms
-from ultralytics.engine.results import Boxes
 from scipy.spatial.distance import cosine
 from typing import List
 import os
 from PIL import Image
 from utils import euclidean_distance, chrono
 import threading
+from time import time
 
 torch.set_num_threads(os.cpu_count())
 
@@ -96,9 +97,12 @@ class EnhancedPersonTracker:
                 'features': np.array([feat]),
                 'temp_frames': 0,
                 'name': None,
-                'color': color
+                'color': color,
+                'confirmed': False,
+                'saved': False,
+                'timestamp': int(time())
             }
-            print(f"Created ID {pid} with color {color}")
+            print(f"Created ID {pid} with color {color}.")
             return pid
 
     @chrono
@@ -134,6 +138,15 @@ class EnhancedPersonTracker:
         assigned_ids.append(matched_id)
 
         return matched_id
+
+    def get_confirmed_persons(self):
+        persons = []
+        for pid, person in self.tracked_persons.items():
+            if len(person['features']) >= 100 and not person['saved']:
+                person['saved'] = True
+                person['confirmed'] = True
+                persons.append((pid, "confirmed", datetime.datetime.fromtimestamp(person['timestamp']).strftime('%Y-%m-%d %H:%M:%S')))
+        return persons
 
     # def generate_embeddings(self, frame: np.ndarray, boxes):
     #     result = []

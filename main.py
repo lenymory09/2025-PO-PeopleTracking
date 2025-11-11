@@ -4,6 +4,9 @@ import yaml
 from PySide6 import QtWidgets
 from DB import DB
 from gui import GUIApp
+import tensorflow as tf
+
+tf.config.set_visible_devices([], 'GPU')
 
 def load_config():
     with open('config.yaml', 'r') as file:
@@ -11,7 +14,7 @@ def load_config():
 
 
 def parse_args():
-    parser = argparse.ArgumentParser(description="Deep SORT Realtime")
+    parser = argparse.ArgumentParser(description="Person Tracker")
     parser.add_argument("-s", "--source", nargs="+", help="Video Source", required=True)
     return parser.parse_args()
 
@@ -25,7 +28,6 @@ def main():
     gui_app.show()
     gui_app.start_processing()
     sys.exit(app.exec())
-
 
 if __name__ == "__main__":
     main()

@@ -81,7 +81,7 @@ def is_correct_box(box: Boxes, width: int) -> bool:
     x1, y1, x2, y2 = box.xyxy[0]
     width_box = x2 - x1
     height_box = y2 - y1
-    conf_correct = box.conf[0] > 0.70
+    conf_correct = box.conf[0] > 0.60
     # is_dimensions_correct = width_box > 100 and height_box > 120
     ratio = height_box / width_box
     return bool(x1 > 25 and x2 < width - 25 and 2 < ratio < 3.5)  # and is_dimensions_correct
@@ -131,6 +131,7 @@ class DeepSortWrapper:
 
     def _update_tracks(self):
         active_tracks = []
+        print(len(self.tracker.tracks))
         for track in self.tracker.tracks:
             if not track.is_confirmed() or track.time_since_update > 1:
                 continue
@@ -213,7 +214,7 @@ class Camera:
             x1, y1, x2, y2 = box.xyxy[0]
             box_width = x2 - x1
             box_height = y2 - y1
-            print(box_height / box_width)
+            #print(box_height / box_width)
 
         self.ultracking.update(frame, detections)
         tracks = self.ultracking.tracks
