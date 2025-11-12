@@ -81,7 +81,7 @@ def is_correct_box(box: Boxes, width: int) -> bool:
     x1, y1, x2, y2 = box.xyxy[0]
     width_box = x2 - x1
     height_box = y2 - y1
-    conf_correct = box.conf[0] > 0.70
+    # conf_correct = box.conf[0] > 0.60
     # is_dimensions_correct = width_box > 100 and height_box > 120
     ratio = height_box / width_box
     return bool(x1 > 25 and x2 < width - 25 and 2 < ratio < 3.5)  # and is_dimensions_correct
@@ -131,6 +131,7 @@ class DeepSortWrapper:
 
     def _update_tracks(self):
         active_tracks = []
+        print(len(self.tracker.tracks))
         for track in self.tracker.tracks:
             if not track.is_confirmed() or track.time_since_update > 1:
                 continue
@@ -162,6 +163,7 @@ class Camera:
         self.vid_idx = vid_idx
         self.ultracking = DeepSortWrapper(config['tracker']['model'])
         self.ultrackid_to_pid: Dict[int, int] = {}
+        self.current_persons = []
 
     @chrono
     def generate_detections(self, frame: np.ndarray) -> Tuple[List[Tuple], List[Boxes]]:
@@ -209,12 +211,6 @@ class Camera:
 
         detections, boxes = self.generate_detections(frame)
 
-        for box in boxes:
-            x1, y1, x2, y2 = box.xyxy[0]
-            box_width = x2 - x1
-            box_height = y2 - y1
-            print(box_height / box_width)
-
         self.ultracking.update(frame, detections)
         tracks = self.ultracking.tracks
         bboxes = []
@@ -234,7 +230,7 @@ class Camera:
             # features = self.reid.extract_features(crops)
             # for track, feat in zip(tracks, features):
             for track in tracks:
-                if track.track_id in self.ultrackid_to_pid:
+                if track.track_id in self.ultrackid_to_pid and self.ultrackid_to_pid[track.track_id] not in assigned_ids:
                     pid = self.ultrackid_to_pid[track.track_id]
                     assigned_ids.append(pid)
 
@@ -252,16 +248,16 @@ class Camera:
 
                     self.ultrackid_to_pid[track.track_id] = pid
 
-                # Only draw the box if there is a valid pid that was found
-                if pid is not None:
-                    label = self.reid.generate_label(pid)
-                    color = self.reid.tracked_persons[pid]['color']
-                    draw_person_box(frame, track.bbox, label, color)
-                else:
+                if pid is None:
                     # Fallback pour debugging
                     print(f"Track {track.track_id} n'a pas de PID assigné")
                     draw_person_box(frame, track.bbox, "Unknown", (0, 0, 255))
-
+                # Only draw the box if there is a valid pid that was found
+                else:
+                    label = self.reid.generate_label(pid)
+                    color = self.reid.tracked_persons[pid]['color']
+                    draw_person_box(frame, track.bbox, label, color)
+            self.current_persons = assigned_ids
         # tracks = self.tracker.update_tracks(detections, frame=frame)
         # bboxes = []
         # crops = []
