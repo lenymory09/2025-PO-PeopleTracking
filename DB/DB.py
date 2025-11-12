@@ -4,6 +4,8 @@ import mysql.connector
 import dotenv
 import os
 
+from mysql.connector.abstracts import MySQLCursorAbstract
+
 dotenv.load_dotenv()
 print(".env chargé avec succès.")
 
@@ -11,7 +13,7 @@ print(".env chargé avec succès.")
 class DB:
     def __init__(self):
         self.conn: Optional[mysql.connector.MySQLConnection] = None
-        self.cursor = None
+        self.cursor: Optional[MySQLCursorAbstract] = None
         self.create_db()
         self.connect_db()
 
@@ -131,6 +133,17 @@ class DB:
     #
     #     # Sauvegarder les changements
     #     self.conn.commit()
+
+    def fetch_nb_personnes(self):
+        self.cursor.execute("SELECT COUNT(*) as nb_personnes FROM visites")
+        return self.cursor.fetchone()
+
+
+    def fetch_personnes(self, ids):
+        placeholders = ', '.join(['%s'] * len(ids))
+        query = f"SELECT v.id_personne, TIME(v.timestamp) FROM visites v WHERE v.id_personne IN ({placeholders})"
+        self.cursor.execute(query, ids)
+        return self.cursor.fetchall()
 
     def close_db(self):
         # Fermer le curseur et la connexion

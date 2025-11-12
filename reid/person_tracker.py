@@ -15,6 +15,7 @@ from time import time
 
 torch.set_num_threads(os.cpu_count())
 
+
 # Use multiple reference embeddings for comparison
 # scores = []
 # for ref_emb in emb_list[-20:]:  # Use recent embeddings
@@ -145,7 +146,8 @@ class EnhancedPersonTracker:
             if len(person['features']) >= 100 and not person['saved']:
                 person['saved'] = True
                 person['confirmed'] = True
-                persons.append((pid, "confirmed", datetime.datetime.fromtimestamp(person['timestamp']).strftime('%Y-%m-%d %H:%M:%S')))
+                persons.append((pid, "confirmed",
+                                datetime.datetime.fromtimestamp(person['timestamp']).strftime('%Y-%m-%d %H:%M:%S')))
         return persons
 
     # def generate_embeddings(self, frame: np.ndarray, boxes):
@@ -211,8 +213,10 @@ class EnhancedPersonTracker:
         norms = np.linalg.norm(feats, axis=1, keepdims=True) + 1e-12
         return feats / norms
 
-    def calc_nb_persons(self):
-        return len(self.tracked_persons)
+    @staticmethod
+    def calc_nb_persons(db_nb_personnes):
+        calc_persons = db_nb_personnes * 0.9
+        return round(calc_persons / 5) * 5
 
     def generate_label(self, pid: int) -> str:
         """

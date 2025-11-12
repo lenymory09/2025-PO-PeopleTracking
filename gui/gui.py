@@ -11,12 +11,12 @@ from PySide6.QtWidgets import QLabel
 
 from reid import EnhancedPersonTracker as PersonTracker
 from tracking import Camera
-from .app_gui import Ui_MainWindow
+from .app_gui import Ui_PersonTracker
 import queue
 from DB import DB
 
 
-class GUIApp(QtWidgets.QMainWindow, Ui_MainWindow):
+class GUIApp(QtWidgets.QMainWindow, Ui_PersonTracker):
     def __init__(self, config):
         super().__init__()
         self.person_tracker = PersonTracker(config)
@@ -54,19 +54,34 @@ class GUIApp(QtWidgets.QMainWindow, Ui_MainWindow):
         self.update_thread = threading.Thread(target=self.update_frames, daemon=True)
         self.update_thread.start()
 
-        self.save_persons = QtCore.QTimer(self)
-        self.save_persons.timeout.connect(self.save_persons_confirmed)
-        self.save_persons.setInterval(1000 * 15)
-        self.save_persons.start()
+        self.save_persons_timer = QtCore.QTimer(self)
+        self.save_persons_timer.timeout.connect(self.save_persons_confirmed)
+        self.save_persons_timer.setInterval(1000 * 15)
+        self.save_persons_timer.start()
+
+        self.update_logs_timer = QtCore.QTimer(self)
+        self.update_logs_timer.timeout.connect(self.update_logs)
+        self.update_logs_timer.setInterval(1000 * 2)
+        self.update_logs_timer.start()
 
     @QtCore.Slot()
     def update_nombre_personnes(self):
-        self.nombres_personnes_label.setText(f"∼ {self.person_tracker.calc_nb_persons()}")
+        nb_persons = self.db.fetch_nb_personnes()[0]
+        self.nombres_personnes_label.setText(f"∼ {self.person_tracker.calc_nb_persons(nb_persons)}")
+
+    def update_logs(self):
+        ids = self.cameras[0].current_persons
+        if ids:
+            persons = self.db.fetch_personnes(ids)
+            string = ""
+            for id_person, timestamp in persons:
+                string += f"ID {id_person} est entré dans la section à {timestamp}.\n"
+
+            self.logs_personnes.setText(string)
 
     def save_persons_confirmed(self):
         persons = self.person_tracker.get_confirmed_persons()
         self.db.insert_visites(persons)
-
     # @QtCore.Slot()
     # def update_frames(self):
     #     for idx, camera in enumerate(self.cameras):
