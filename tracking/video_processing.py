@@ -20,6 +20,8 @@ from tracking.deep_sort.deep_sort.tracker import Tracker as DeepSortTracker
 from tracking.deep_sort.tools import generate_detections as gdet
 from tracking.deep_sort.deep_sort import nn_matching
 
+import torch
+
 def filter_boxes_by_dimensions(boxes: List[Boxes], width: int) -> List[Boxes]:
     return list(filter(lambda box: is_correct_box(box, width), boxes))
 
@@ -102,7 +104,7 @@ class DeepSortWrapper:
         self.tracks: List[Track] = []
 
     @chrono
-    def update(self, frame, detections):
+    def update(self, frame, detections, features: Optional[List[np.ndarray]] = None):
 
         # Step 1: If no detections, run a predict-update cycle with an empty list.
         if len(detections) == 0:
@@ -117,7 +119,8 @@ class DeepSortWrapper:
         bboxes[:, 2:] = bboxes[:, 2:] - bboxes[:, :2]
 
         # Step 3: Generate appearance features for each bounding box
-        features = self.encoder(frame, bboxes)
+        if features is None:
+            features = self.encoder(frame, bboxes)
 
         # Step 4: Wrap everything in Deep SORT's Detection objects
         dets = []
@@ -131,7 +134,6 @@ class DeepSortWrapper:
 
     def _update_tracks(self):
         active_tracks = []
-        print(len(self.tracker.tracks))
         for track in self.tracker.tracks:
             if not track.is_confirmed() or track.time_since_update > 1:
                 continue
@@ -144,6 +146,7 @@ class DeepSortWrapper:
         self.tracks = active_tracks
 
 
+
 class Camera:
     def __init__(self, source: str, reid: EnhancedPersonTracker, config, vid_idx):
         self.running = False
@@ -151,19 +154,18 @@ class Camera:
         self.cap = cv2.VideoCapture(source)
         self.reid = reid
         self.frame_count = 0
-        # self.tracker = DeepSort(
-        #     max_age=config['tracker']['max_age'],
-        #     n_init=config['tracker']['n_init'],
-        #     max_cosine_distance=config['tracker']['max_cosine_distance'],
-        #     nn_budget=config['tracker']['nn_budget'],
-        # )
         self.detection_config = config['detection']
-        self.yolo = YOLO(config['models']['yolo'])
+        self.detection_device = torch.device(self.detection_config['device'])
+        self.yolo = YOLO(config['models']['yolo'], verbose=False)
+        self.yolo.to(self.detection_device)
         self.frame_queue: Optional[Queue] = None
         self.vid_idx = vid_idx
         self.ultracking = DeepSortWrapper(config['tracker']['model'])
         self.ultrackid_to_pid: Dict[int, int] = {}
         self.current_persons = []
+
+    def get_tracked_pids(self) -> List[int]:
+        return list(filter(lambda track: track is not None, map(lambda track: self.ultrackid_to_pid.get(track.track_id, None), self.ultracking.tracks)))
 
     @chrono
     def generate_detections(self, frame: np.ndarray) -> Tuple[List[Tuple], List[Boxes]]:
@@ -175,8 +177,11 @@ class Camera:
         _, frame_width, _ = frame.shape
 
         results = \
-            self.yolo(frame, classes=[self.detection_config['person_class_id']], device=self.detection_config['device'],
-                      conf=self.detection_config['confidence_threshold'], iou=0.5, verbose=False)[0]
+            self.yolo.predict(
+                frame,
+                classes=[self.detection_config['person_class_id']],
+                conf=self.detection_config['confidence_threshold'],
+            )[0]
         detections = []
         boxes = results.boxes
         boxes = filter_boxes_by_dimensions(boxes, frame_width)
@@ -201,6 +206,93 @@ class Camera:
 
         return crops
 
+    def process_frame1(self) -> Optional[np.ndarray]:
+        ret, frame = self.read()
+        if not ret:
+            return None
+
+        height, width, _ = frame.shape
+        self.frame_count += 1
+
+        detections, boxes = self.generate_detections(frame)
+        bboxes = []
+        crops = []
+
+        for l,t,r,b,_ in detections:
+            l, t, r, b = map(int, (l,t,r,b))
+            # if (r - l) > 10 and (b - t) > 10:
+            bboxes.append((l, t, r, b))
+            bbox = (l, t, r - l, b - t)
+            crops.append(extract_image_patch(frame, bbox, (256, 128)))
+        
+        if crops:
+            features = self.reid.extract_features(crops)
+        else:
+            features = None
+
+        self.ultracking.update(frame, detections, features)
+        tracks = self.ultracking.tracks
+
+        assigned_ids = []
+
+        # features = self.reid.generate_embeddings(frame, bboxes)
+        tracked_pids = self.get_tracked_pids()
+        if crops:
+            # for track, feat in zip(tracks, features):
+            for track, feat in zip(tracks, features):
+                feat = feat.detach().cpu().numpy()
+                if track.track_id in self.ultrackid_to_pid and self.ultrackid_to_pid[track.track_id] not in assigned_ids:
+                    pid = self.ultrackid_to_pid[track.track_id]
+                    assigned_ids.append(pid)
+
+                    self.reid.update_gallery(pid, feat)
+                else:
+                    # Pour les nouveaux tracks, utiliser le premier feature
+                    pid = self.reid.match_person(feat, assigned_ids)
+
+                    if pid in tracked_pids:
+                        pid = None
+                    else:
+                        self.ultrackid_to_pid[track.track_id] = pid
+
+                if pid is None:
+                    # Fallback pour debugging
+                    print(f"Track {track.track_id} n'a pas de PID assigné")
+                    draw_person_box(frame, track.bbox, "Unknown", (0, 0, 255))
+                # Only draw the box if there is a valid pid that was found
+                else:
+                    label = self.reid.generate_label(pid)
+                    color = self.reid.tracked_persons[pid]['color']
+                    draw_person_box(frame, track.bbox, label, color)
+            self.current_persons = assigned_ids
+        # tracks = self.tracker.update_tracks(detections, frame=frame)
+        # bboxes = []
+        # crops = []
+
+        # good_tracks = []
+        # for trk in tracks:
+        #    if trk.is_confirmed() and trk.time_since_update <= 1:
+        #        good_tracks.append(trk)
+        #        l, t, r, b = map(int, trk.to_ltrb())
+        #        if (r - l) > 10 and (b - t) > 10:
+        #            bboxes.append((l, t, r, b))
+        #            crops.append(frame[t:b, l:r])
+
+        # if crops:
+        # embeds = self.reid.extract_features(crops).tolist()
+        # embeds = self.reid.generate_embeddings(frame, detections)
+        # embeds = list(map(lambda embed: embed / np.linalg.norm(embed), embeds))
+
+        # assigned_ids = []
+        #
+        # for current_embedding, box in zip(embeds, boxes):
+        #     pid = self.reid.match_person(current_embedding, assigned_ids)
+        #     label = self.reid.generate_label(pid)
+        #     color = self.reid.tracked_persons[pid]['color']
+        #     draw_person_box(frame, box.xyxy[0], label, color)
+
+        return frame
+
     def process_frame(self) -> Optional[np.ndarray]:
         ret, frame = self.read()
         if not ret:
@@ -221,13 +313,14 @@ class Camera:
             # if (r - l) > 10 and (b - t) > 10:
             bboxes.append((l, t, r, b))
             bbox = (l, t, r - l, b - t)
-            crops.append(extract_image_patch(frame, bbox, (100, 200)))
+            return extract_image_patch(frame, bbox, (256,128))
+            #crops.append(extract_image_patch(frame, bbox, (100, 200)))
 
         assigned_ids = []
 
         # features = self.reid.generate_embeddings(frame, bboxes)
         if crops:
-            # features = self.reid.extract_features(crops)
+            #features = self.reid.extract_features(crops)
             # for track, feat in zip(tracks, features):
             for track in tracks:
                 if track.track_id in self.ultrackid_to_pid and self.ultrackid_to_pid[track.track_id] not in assigned_ids:
@@ -299,7 +392,7 @@ class Camera:
             if not ret:
                 break
 
-            processed = self.process_frame()
+            processed = self.process_frame1()
 
             # Send frame to UI
             try:
