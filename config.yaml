@@ -1,7 +1,7 @@
 # Model Configuration
 models:
   yolo: 'models/yolov8n.pt'
-  reid_gpu: 'resnet50'
+  reid_gpu: 'osnet_x1_0'
   reid_cpu: 'osnet_ain_x1_0'
   reid_num_classes: 1501
 
@@ -21,13 +21,13 @@ reid:
 tracker:
   max_age: 30
   n_init: 2
-  max_cosine_distance: 0.4
+  max_cosine_distance: 0.3
   nn_budget: 50
   model: "models/market1501.pb"
 
 # Detection Parameters
 detection:
-  confidence_threshold: 0.3
+  confidence_threshold: 0.5
   person_class_id: 0
   device: "cpu"
   min_box_ratio: 0.4
@@ -37,5 +37,7 @@ paths:
 
 # Video Processing
 video:
-  max_videos: 4
-  sources: ["videos_exemples/MOT17-1.webm"]
+  max_videos: 2
+  sources: ["videos_exemples/MOT17-3.webm"]
+  #sources: [0]
+  #sources: [0,1]

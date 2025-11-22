@@ -5,7 +5,7 @@ from PySide6 import QtWidgets
 from gui import GUIApp
 import tensorflow as tf
 
-tf.config.set_visible_devices([], 'GPU')
+#tf.config.set_visible_devices([], 'GPU')
 
 def load_config():
     with open('config.yaml', 'r') as file:

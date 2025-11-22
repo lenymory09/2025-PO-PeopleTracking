@@ -24,19 +24,14 @@ class GUIApp(QtWidgets.QMainWindow, Ui_PersonTracker):
         for idx, source in enumerate(config['video']['sources']):
             self.cameras.append(Camera(source, self.person_tracker, config, idx))
         self.setupUi(self)
-        self.cameras_labels = self.centralwidget.findChildren(QLabel)
-        print("labels:", self.cameras_labels)
+        self.cameras_labels = [self.camera_3, self.camera_4]
         self.running = False
         self.processors = []
         self.frame_queues = {}
         self.update_thread: Optional[threading.Thread] = None
-        self.save_persons_thread: Optional[threading.Thread] = None
         self.db = DB()
 
     def start_processing(self):
-        # self.timer = QtCore.QTimer(self)
-        # self.timer.timeout.connect(self.update_frames)
-        # self.timer.start(30)
         self.timer_update_persons = QtCore.QTimer(self)
         self.timer_update_persons.timeout.connect(self.update_nombre_personnes)
         self.timer_update_persons.start(1)
@@ -56,7 +51,7 @@ class GUIApp(QtWidgets.QMainWindow, Ui_PersonTracker):
 
         self.save_persons_timer = QtCore.QTimer(self)
         self.save_persons_timer.timeout.connect(self.save_persons_confirmed)
-        self.save_persons_timer.setInterval(1000 * 15)
+        self.save_persons_timer.setInterval(1000 * 5)
         self.save_persons_timer.start()
 
         self.update_logs_timer = QtCore.QTimer(self)
