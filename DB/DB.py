@@ -120,20 +120,6 @@ class DB:
         self.cursor.executemany("INSERT INTO visites (id_personne, state, timestamp) VALUES (%s,%s,%s)", personnes)
         self.conn.commit()
 
-    # insérer une personne dans la base de données
-    # def insert_personne_passage(self, ID_personne, ID_lieux):
-    #     # Insérer la personne
-    #     self.cursor.execute("INSERT INTO personne (ID_personne) VALUES (%s)", (ID_personne,))
-    #
-    #     # Insérer le passage dans la table visiter avec la date actuelle
-    #     self.cursor.execute("""
-    #                         INSERT INTO visiter (ID_personne, ID_lieux, date_visite)
-    #                         VALUES (%s, %s, NOW())
-    #                         """, (ID_personne, ID_lieux))
-    #
-    #     # Sauvegarder les changements
-    #     self.conn.commit()
-
     def fetch_nb_personnes(self):
         self.cursor.execute("SELECT COUNT(*) as nb_personnes FROM visites")
         return self.cursor.fetchone()

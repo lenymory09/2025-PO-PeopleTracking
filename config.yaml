@@ -22,15 +22,18 @@ tracker:
   max_age: 30
   n_init: 2
   max_cosine_distance: 0.3
-  nn_budget: 50
-  model: "models/market1501.pb"
+  nn_budget: 30
+  model: "models/mars-small128.pb"
 
 # Detection Parameters
 detection:
   confidence_threshold: 0.5
   person_class_id: 0
   device: "cpu"
-  min_box_ratio: 0.4
+  min_box_ratio: 2
+  max_box_ratio: 3.5
+  min_height_box: [100, 100]
+  max_height_box: [200, 200]
 # Paths
 paths:
   embeddings_dir: 'embeddings'

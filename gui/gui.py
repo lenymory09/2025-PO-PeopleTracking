@@ -3,7 +3,7 @@ import threading
 from typing import List, Optional
 
 from PySide6 import QtCore, QtWidgets
-from PySide6.QtGui import QImage, QPixmap
+from PySide6.QtGui import QImage, QPixmap, QFont
 import cv2
 import time
 
@@ -11,7 +11,7 @@ from PySide6.QtWidgets import QLabel
 
 from reid import EnhancedPersonTracker as PersonTracker
 from tracking import Camera
-from .app_gui import Ui_PersonTracker
+from .app_gui2 import Ui_PersonTracker
 import queue
 from DB import DB
 
@@ -23,8 +23,13 @@ class GUIApp(QtWidgets.QMainWindow, Ui_PersonTracker):
         self.cameras: List[Camera] = []
         for idx, source in enumerate(config['video']['sources']):
             self.cameras.append(Camera(source, self.person_tracker, config, idx))
+
+        if len(self.cameras) > 2:
+            print("Il ne peut y avoir que 2 sources de caméras.")
+            exit(1)
         self.setupUi(self)
-        self.cameras_labels = [self.camera_3, self.camera_4]
+        self.resize(960, 540)
+        self.cameras_labels = [self.camera_1, self.camera_2]
         self.running = False
         self.processors = []
         self.frame_queues = {}
@@ -65,31 +70,21 @@ class GUIApp(QtWidgets.QMainWindow, Ui_PersonTracker):
         self.nombres_personnes_label.setText(f"∼ {self.person_tracker.calc_nb_persons(nb_persons)}")
 
     def update_logs(self):
-        ids = self.cameras[0].current_persons
+        all_ids = []
+
+        ids = list(set(self.cameras[0].current_persons + self.cameras[1].current_persons))
         if ids:
             persons = self.db.fetch_personnes(ids)
             string = ""
             for id_person, timestamp in persons:
-                string += f"ID {id_person} est entré dans la section à {timestamp}.\n"
+                string += f"ID {id_person} : {timestamp}\n"
 
-            self.logs_personnes.setText(string)
+            if string != "":
+                self.logs_personnes.setText(string)
 
     def save_persons_confirmed(self):
         persons = self.person_tracker.get_confirmed_persons()
         self.db.insert_visites(persons)
-    # @QtCore.Slot()
-    # def update_frames(self):
-    #     for idx, camera in enumerate(self.cameras):
-    #         lbl = self.cameras_labels[idx]
-    #         frame = camera.track_people()
-    #         if frame is not None:
-    #             frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-    #             h, w, ch = frame.shape
-    #             img = QImage(frame.data, w, h, ch * w, QImage.Format_RGB888)
-    #
-    #             lbl.setPixmap(QPixmap.fromImage(img).scaled(
-    #                 lbl.width(), lbl.height()
-    #             ))
 
     def update_frames(self):
         update_interval = 0.033
@@ -120,11 +115,14 @@ class GUIApp(QtWidgets.QMainWindow, Ui_PersonTracker):
                 time.sleep(0.001)
 
     def resizeEvent(self, event):
-        # impose le ratio 16:9
-        pass
-        # w = event.size().width()
-        # h = int(w * 9 / 16)  # calcule la hauteur
-        # self.resize(w, h)
+        w = event.size().width()
+
+        font_size = max(13, w // 100)
+        font = QFont()
+        font.setPointSize(font_size)
+        self.logs_personnes.setFont(font)
+
+        super().resizeEvent(event)
 
 
 if __name__ == "__main__":

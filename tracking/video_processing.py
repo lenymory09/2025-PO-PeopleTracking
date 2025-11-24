@@ -1,7 +1,6 @@
 import queue
 import time
 
-from deep_sort_realtime.deepsort_tracker import DeepSort
 import cv2
 from ultralytics import YOLO
 import numpy as np
@@ -19,62 +18,21 @@ from utils import draw_person_box, chrono
 from tracking.deep_sort.deep_sort.tracker import Tracker as DeepSortTracker
 from tracking.deep_sort.tools import generate_detections as gdet
 from tracking.deep_sort.deep_sort import nn_matching
+from deep_sort_realtime.deepsort_tracker import DeepSort
 
 import torch
 
-def filter_boxes_by_dimensions(boxes: List[Boxes], width: int) -> List[Boxes]:
-    return list(filter(lambda box: is_correct_box(box, width), boxes))
+def filter_boxes_by_dimensions(boxes: List[Boxes], width: int, min_box_ratio, max_box_ratio) -> List[Boxes]:
+    return list(filter(lambda box: is_correct_box(box, width, min_box_ratio, max_box_ratio), boxes))
 
 
-def boxes_overlap(box1: List[int], box2) -> bool:
-    """
-    Vérifie si deux boîtes se chevauchents
-    :param box1: boite 1 à analyser
-    :param box2: boite 2 à analyser
-    :return:
-    """
-    xA = max(box1[0], box2[0])
-    yA = max(box1[1], box2[1])
-    xB = min(box1[2], box2[2])
-    yB = min(box1[3], box2[3])
-    return (xB - xA) > 0 and (yB - yA) > 0
-
-
-def filter_by_aspect_ratio(boxes: List[Boxes], min_ratio: float = 0.1, max_ratio: float = 0.8) -> List[Boxes]:
-    """Filter boxes by human-like aspect ratios"""
-    filtered = []
-    for box in boxes:
-        x1, y1, x2, y2 = box.xyxy[0]
-        width = x2 - x1
-        height = y2 - y1
-        if height == 0:
-            continue
-        aspect_ratio = width / height
-        if min_ratio <= aspect_ratio <= max_ratio:
-            filtered.append(box)
-    return filtered
-
-
-def filter_boxes_by_overlapping(boxes: List[Boxes]) -> List[Boxes]:
-    boxes = sorted(boxes, key=lambda box: box.xyxy[0][0])
-    filtered_boxes = []
-    for i in range(len(boxes)):
-        box1 = boxes[i]
-        for j in range(i + 1, len(boxes)):
-            box2 = boxes[j]
-            if boxes_overlap(box1.xyxy[0], box2.xyxy[0]):
-                best_box = max(box1, box2, key=lambda box: box.xyxy[0][3] - box.xyxy[0][1])
-                if best_box not in filtered_boxes:
-                    filtered_boxes.append(best_box)
-
-    return filtered_boxes
-
-
-def is_correct_box(box: Boxes, width: int) -> bool:
+def is_correct_box(box: Boxes, width: int, min_box_ratio, max_box_ratio) -> bool:
     """
     Vérifie si la boîte donné en paramètre est correcte et apte à être utilisé.
 
     Args:
+        :param max_box_ratio:
+        :param min_box_ratio:
         :param box: Boite à analyser
         :param width: largeur de la frame analysé
     Returns:
@@ -86,7 +44,7 @@ def is_correct_box(box: Boxes, width: int) -> bool:
     # conf_correct = box.conf[0] > 0.60
     # is_dimensions_correct = width_box > 100 and height_box > 120
     ratio = height_box / width_box
-    return bool(x1 > 25 and x2 < width - 25 and 2 < ratio < 3.5)  # and is_dimensions_correct
+    return bool(x1 > 25 and x2 < width - 25 and min_box_ratio < ratio < max_box_ratio)  # and is_dimensions_correct
 
 
 class Track:
@@ -155,17 +113,29 @@ class Camera:
         self.reid = reid
         self.frame_count = 0
         self.detection_config = config['detection']
+        self.tracker_config = config['tracker']
         self.detection_device = torch.device(self.detection_config['device'])
-        self.yolo = YOLO(config['models']['yolo'], verbose=False)
+        self.yolo = YOLO(config['models']['yolo'])
         self.yolo.to(self.detection_device)
         self.frame_queue: Optional[Queue] = None
         self.vid_idx = vid_idx
-        self.ultracking = DeepSortWrapper(config['tracker']['model'])
+        self.ultracker = DeepSortWrapper(
+            model_filename=config['tracker']['model'],
+            max_cosine_distance=config['tracker']['max_cosine_distance'],
+            nn_budget=config['tracker']['nn_budget']
+        )
         self.ultrackid_to_pid: Dict[int, int] = {}
         self.current_persons = []
+        # self.tracker = DeepSort(
+        #     max_age=self.tracker_config['max_age'],
+        #     n_init=self.tracker_config['n_init'],
+        #     max_cosine_distance=self.tracker_config['max_cosine_distance'],
+        #     nn_budget=self.tracker_config['nn_budget'],
+        #     embedder="mobilenet"
+        # )
 
     def get_tracked_pids(self) -> List[int]:
-        return list(filter(lambda track: track is not None, map(lambda track: self.ultrackid_to_pid.get(track.track_id, None), self.ultracking.tracks)))
+        return list(filter(lambda track: track is not None, map(lambda track: self.ultrackid_to_pid.get(track.track_id, None), self.ultracker.tracks)))
 
     @chrono
     def generate_detections(self, frame: np.ndarray) -> Tuple[List[Tuple], List[Boxes]]:
@@ -181,65 +151,59 @@ class Camera:
                 frame,
                 classes=[self.detection_config['person_class_id']],
                 conf=self.detection_config['confidence_threshold'],
+                verbose=False
             )[0]
         detections = []
         boxes = results.boxes
-        boxes = filter_boxes_by_dimensions(boxes, frame_width)
-        # boxes = filter_boxes_by_overlag(boxes)
-        # boxes = filter_by_aspect_ratio(boxes, 0.4)
+        boxes = filter_boxes_by_dimensions(boxes, frame_width, self.detection_config['min_box_ratio'], self.detection_config['max_box_ratio'])
+
         for box in boxes:
             x1, y1, x2, y2 = map(int, box.xyxy[0])
             conf = float(box.conf[0])
             cls_id = int(box.cls[0])
-            # Format: ([left, top, width, height], confidence, class_id)
+            # Format Deepsort RealTime: ([left, top, width, height], confidence, class_id)
             # detections.append(([x1, y1, x2 - x1, y2 - y1], conf, cls_id))
+            # Deepsort Wrapper
             detections.append([x1, y1, x2, y2, conf])
         return detections, boxes
 
-    def read(self):
-        return self.cap.read()
-
-    def generate_crops(self, frame: np.ndarray, bboxes: Tuple[int, int, int, int]) -> List[np.ndarray]:
-        crops = []
-        for (l, t, r, b) in bboxes:
-            crops.append(frame[l:r, t:b])
-
-        return crops
-
-    def process_frame1(self) -> Optional[np.ndarray]:
-        ret, frame = self.read()
-        if not ret:
-            return None
-
+    def process_frame1(self, frame) -> Optional[np.ndarray]:
         height, width, _ = frame.shape
         self.frame_count += 1
 
         detections, boxes = self.generate_detections(frame)
+
+        self.ultracker.update(frame, detections)
+        tracks = self.ultracker.tracks
+
+        # tracks = self.tracker.update_tracks(detections, frame=frame)
         bboxes = []
         crops = []
 
-        for l,t,r,b,_ in detections:
-            l, t, r, b = map(int, (l,t,r,b))
-            # if (r - l) > 10 and (b - t) > 10:
-            bboxes.append((l, t, r, b))
+        # Process confirmed tracks
+        # for trk in tracks:
+        #     if trk.is_confirmed() and trk.time_since_update <= 1:
+        #         l, t, r, b = map(int, trk.to_ltrb())
+        #         if (r - l) > 10 and (b - t) > 10:
+        #             bboxes.append((l, t, r, b))
+        #             bbox = (l, t, r - l, b - t)
+        #             crops.append(extract_image_patch(frame, bbox, (256, 128)))
+
+        for trk in tracks:
+            l, t, r, b = trk.bbox
+            bboxes.append(trk.bbox)
             bbox = (l, t, r - l, b - t)
             crops.append(extract_image_patch(frame, bbox, (256, 128)))
-        
+
         if crops:
             features = self.reid.extract_features(crops)
         else:
             features = None
 
-        self.ultracking.update(frame, detections, features)
-        tracks = self.ultracking.tracks
-
         assigned_ids = []
-
-        # features = self.reid.generate_embeddings(frame, bboxes)
-        tracked_pids = self.get_tracked_pids()
         if crops:
-            # for track, feat in zip(tracks, features):
-            for track, feat in zip(tracks, features):
+            for track, feat, bbox in zip(tracks, features, bboxes):
+                tracked_pids = self.get_tracked_pids()
                 feat = feat.detach().cpu().numpy()
                 if track.track_id in self.ultrackid_to_pid and self.ultrackid_to_pid[track.track_id] not in assigned_ids:
                     pid = self.ultrackid_to_pid[track.track_id]
@@ -263,48 +227,19 @@ class Camera:
                 else:
                     label = self.reid.generate_label(pid)
                     color = self.reid.tracked_persons[pid]['color']
-                    draw_person_box(frame, track.bbox, label, color)
+                    draw_person_box(frame, bbox, label, color)
             self.current_persons = assigned_ids
-        # tracks = self.tracker.update_tracks(detections, frame=frame)
-        # bboxes = []
-        # crops = []
-
-        # good_tracks = []
-        # for trk in tracks:
-        #    if trk.is_confirmed() and trk.time_since_update <= 1:
-        #        good_tracks.append(trk)
-        #        l, t, r, b = map(int, trk.to_ltrb())
-        #        if (r - l) > 10 and (b - t) > 10:
-        #            bboxes.append((l, t, r, b))
-        #            crops.append(frame[t:b, l:r])
-
-        # if crops:
-        # embeds = self.reid.extract_features(crops).tolist()
-        # embeds = self.reid.generate_embeddings(frame, detections)
-        # embeds = list(map(lambda embed: embed / np.linalg.norm(embed), embeds))
-
-        # assigned_ids = []
-        #
-        # for current_embedding, box in zip(embeds, boxes):
-        #     pid = self.reid.match_person(current_embedding, assigned_ids)
-        #     label = self.reid.generate_label(pid)
-        #     color = self.reid.tracked_persons[pid]['color']
-        #     draw_person_box(frame, box.xyxy[0], label, color)
 
         return frame
 
-    def process_frame(self) -> Optional[np.ndarray]:
-        ret, frame = self.read()
-        if not ret:
-            return None
-
+    def process_frame(self, frame) -> Optional[np.ndarray]:
         height, width, _ = frame.shape
         self.frame_count += 1
 
         detections, boxes = self.generate_detections(frame)
 
-        self.ultracking.update(frame, detections)
-        tracks = self.ultracking.tracks
+        self.ultracker.update(frame, detections)
+        tracks = self.ultracker.tracks
         bboxes = []
         crops = []
 
@@ -313,8 +248,9 @@ class Camera:
             # if (r - l) > 10 and (b - t) > 10:
             bboxes.append((l, t, r, b))
             bbox = (l, t, r - l, b - t)
-            return extract_image_patch(frame, bbox, (256,128))
-            #crops.append(extract_image_patch(frame, bbox, (100, 200)))
+            # return extract_image_patch(frame, bbox, (256,128))
+            crops.append(extract_image_patch(frame, bbox, (256,128)))
+
 
         assigned_ids = []
 
@@ -391,8 +327,7 @@ class Camera:
             ret, frame = self.cap.read()
             if not ret:
                 break
-
-            processed = self.process_frame1()
+            processed = self.process_frame1(frame)
 
             # Send frame to UI
             try:
