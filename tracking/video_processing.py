@@ -18,7 +18,6 @@ from utils import draw_person_box, chrono
 from tracking.deep_sort.deep_sort.tracker import Tracker as DeepSortTracker
 from tracking.deep_sort.tools import generate_detections as gdet
 from tracking.deep_sort.deep_sort import nn_matching
-from deep_sort_realtime.deepsort_tracker import DeepSort
 
 import torch
 

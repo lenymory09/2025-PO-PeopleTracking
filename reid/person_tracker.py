@@ -163,54 +163,6 @@ class EnhancedPersonTracker:
                                 datetime.datetime.fromtimestamp(person['timestamp']).strftime('%Y-%m-%d %H:%M:%S')))
         return persons
 
-    # def generate_embeddings(self, frame: np.ndarray, boxes):
-    #     result = []
-    #     for box in boxes:
-    #         result.append(self.extract_embedding(frame, box))
-    #
-    #     return result
-    #
-    # def extract_embedding(self, img: np.ndarray, box: Tuple):
-    #     """Improved embedding extraction with preprocessing"""
-    #     x1, y1, x2, y2 = map(int, box)
-    #     # x1, y1, width, height = map(int, box)
-    #     # x2, y2 = x1 + width, y1 + height
-    #
-    #     # Expand box slightly for better context
-    #     padding = 10
-    #     x1 = max(0, x1 - padding)
-    #     y1 = max(0, y1 - padding)
-    #     x2 = min(img.shape[1], x2 + padding)
-    #     y2 = min(img.shape[0], y2 + padding)
-    #
-    #     person_crop = img[y1:y2, x1:x2]
-    #     # Skip if crop is too small
-    #     if person_crop.size == 0 or person_crop.shape[0] < 50 or person_crop.shape[1] < 25:
-    #         return None
-    #
-    #     # Enhanced preprocessing
-    #     person_crop = Image.fromarray(person_crop[:, :, ::-1])
-    #
-    #     # Apply multiple augmentations and average embeddings
-    #     embeddings = []
-    #     # for augment in [False, True]:
-    #     #     if augment:
-    #     #         tensor = self.transform(transforms.functional.hflip(person_crop)).unsqueeze(0)
-    #     #     else:
-    #     #         tensor = self.transform(person_crop).unsqueeze(0)
-    #     #
-    #     #     with torch.no_grad():
-    #     #         emb = self.reid_model(tensor)
-    #     #         embeddings.append(emb.squeeze().numpy())
-    #     tensor = self.transform(person_crop).unsqueeze(0)
-    #     with torch.no_grad():
-    #         emb = self.reid_model(tensor)
-    #         embeddings.append(emb.squeeze().numpy())
-    #
-    #     # Average the embeddings
-    #     avg_embedding = np.mean(embeddings, axis=0)
-    #     return avg_embedding / np.linalg.norm(avg_embedding)  # L2 normalize
-
     def extract_features(self, bgr_imgs) -> List[np.ndarray]:
         batch = []
         for img in bgr_imgs:
@@ -219,25 +171,10 @@ class EnhancedPersonTracker:
 
         return self.feature_extractor(batch)
 
-    def extract_features2(self, bgr_imgs) -> np.ndarray:
-        batch = []
-        for img in bgr_imgs:
-            img_rgb = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
-            img_pil = Image.fromarray(img_rgb)
-            img_t = self.transform(img_pil).unsqueeze(0)
-            batch.append(img_t)
-
-        with torch.no_grad():
-            batch_t = torch.cat(batch).to(self.device)
-            feats = self.reid_model(batch_t).cpu().numpy()
-
-        norms = np.linalg.norm(feats, axis=1, keepdims=True) + 1e-12
-        return feats / norms
-
     @staticmethod
     def calc_nb_persons(db_nb_personnes):
         calc_persons = db_nb_personnes * 0.9
-        return round(calc_persons / 5) * 5
+        return round(calc_persons)
 
     def generate_label(self, pid: int) -> str:
         """

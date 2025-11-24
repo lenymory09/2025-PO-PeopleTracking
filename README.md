@@ -25,11 +25,11 @@ pip install -r requirements.txt
 ```bash
 python download_models.py
 ```
+
 4. Si vous êtes sur un PC Nvidia veuillez installer cuda pour la rapidité. Et installer les librairies pour :
 ```bash
 
 ```
-Si vous êtes 
 5. 
 
 
