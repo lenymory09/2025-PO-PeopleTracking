@@ -2,7 +2,6 @@ import queue
 import time
 
 import cv2
-from torch import tensor
 from ultralytics import YOLO
 import numpy as np
 
@@ -35,10 +34,10 @@ def is_correct_box(box: Boxes, width: int, min_box_ratio, max_box_ratio, min_box
     Vérifie si la boîte donné en paramètre est correcte et apte à être utilisé.
 
     Args:
-        :param max_box_height:
-        :param min_box_height:
-        :param max_box_ratio:
-        :param min_box_ratio:
+        :param max_box_height: Taille max de la boîte
+        :param min_box_height: Taille minimum de la boîte
+        :param max_box_ratio: Ratio max de la boite
+        :param min_box_ratio: Ratio min de la boite
         :param box: Boite à analyser
         :param width: largeur de la frame analysé
     Returns:
@@ -56,13 +55,17 @@ def is_correct_box(box: Boxes, width: int, min_box_ratio, max_box_ratio, min_box
 
 
 class Track:
-    def __init__(self, track_id, bbox, features):
+    """
+    Classe représentant un Track DeepSORT
+    """
+    def __init__(self, track_id, bbox):
         self.track_id = track_id
         self.bbox = bbox
-        self.features = features
-
 
 class DeepSortWrapper:
+    """
+    Classe qui gère l'algorithme DeepSORT dans le projet.
+    """
     def __init__(self, model_filename='models/mars-small128.pb', max_cosine_distance=0.4, nn_budget=None):
         metric = nn_matching.NearestNeighborDistanceMetric("cosine", max_cosine_distance, nn_budget)
         self.tracker = DeepSortTracker(metric)
@@ -70,8 +73,12 @@ class DeepSortWrapper:
         self.tracks: List[Track] = []
 
     @chrono
-    def update(self, frame, detections, features: Optional[List[np.ndarray]] = None):
-
+    def update(self, frame, detections):
+        """
+        Met à jour les tracks
+        :param frame: image à analyser
+        :param detections: détections des personnes
+        """
         # Step 1: If no detections, run a predict-update cycle with an empty list.
         if len(detections) == 0:
             self.tracker.predict()
@@ -85,8 +92,7 @@ class DeepSortWrapper:
         bboxes[:, 2:] = bboxes[:, 2:] - bboxes[:, :2]
 
         # Step 3: Generate appearance features for each bounding box
-        if features is None:
-            features = self.encoder(frame, bboxes)
+        features = self.encoder(frame, bboxes)
 
         # Step 4: Wrap everything in Deep SORT's Detection objects
         dets = []
@@ -106,8 +112,7 @@ class DeepSortWrapper:
 
             bbox = track.to_tlbr()  # returns [x1, y1, x2, y2]
             track_id = track.track_id
-            features = track.features
-            active_tracks.append(Track(track_id, bbox, features))
+            active_tracks.append(Track(track_id, bbox))
 
         self.tracks = active_tracks
 
@@ -137,6 +142,9 @@ class Camera:
         self.current_persons = []
 
     def get_tracked_pids(self) -> List[int]:
+        """
+        :return: Retourne les ids des tracks actifs
+        """
         return list(filter(lambda track: track is not None,
                            map(lambda track: self.ultrackid_to_pid.get(track.track_id, None), self.ultracker.tracks)))
 
@@ -172,6 +180,11 @@ class Camera:
         return detections, boxes
 
     def process_frame(self, frame) -> Optional[np.ndarray]:
+        """
+        Fait le traitement pour l'image courrante
+        :param frame: image du flux
+        :return: l'image venant du flux
+        """
         height, width, _ = frame.shape
         self.frame_count += 1
 
@@ -200,8 +213,7 @@ class Camera:
         if crops:
             for track, feat, bbox in zip(tracks, features, bboxes):
                 tracked_pids = self.get_tracked_pids()
-                if isinstance(feat, tensor):
-                    feat = feat.detach().cpu().numpy()
+                feat = feat.detach().cpu().numpy()
                 if track.track_id in self.ultrackid_to_pid and self.ultrackid_to_pid[
                     track.track_id] not in assigned_ids:
                     pid = self.ultrackid_to_pid[track.track_id]
