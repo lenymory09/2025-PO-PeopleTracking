@@ -1,14 +1,11 @@
 import datetime
-
 import cv2
 import numpy as np
 import torch
 import torchreid
-from torchvision import transforms
 from scipy.spatial.distance import cosine
 from typing import List
 import os
-from PIL import Image
 from utils import euclidean_distance, chrono
 import threading
 from time import time
@@ -20,29 +17,7 @@ MODELS_PATH = {
     "osnet_ain_x1_0": "models/osnet_ain_x1_0_msmt17_256x128_amsgrad_ep50_lr0.0015_coslr_b64_fb10_softmax_labsmth_flip_jitter.pth"
 }
 
-
-# Use multiple reference embeddings for comparison
-# scores = []
-# for ref_emb in emb_list[-20:]:  # Use recent embeddings
-# Try multiple distance metrics
-# cosine_dist = cosine(embed, ref_emb)
-# euclidean_dist = euclidean_distance(embed, ref_emb)
-
-# Combined score
-# combined_score = 0.7 * cosine_dist + 0.3 * (euclidean_dist / 10.0)
-# scores.append(combined_score)
-
-# Use best match from recent embeddings
-# if scores:
-# current_best = min(scores)
-# if current_best < DISTANCE_THRESHOLD and current_best < best_score:
-# best_score = current_best
-# matched_id = known_id
-
-# return matched_id
-
-
-class EnhancedPersonTracker:
+class EnhancedReID:
     def __init__(self, config):
         self.tracked_persons = {}
         self.track_history = {}  # Track movement patterns
@@ -53,13 +28,6 @@ class EnhancedPersonTracker:
         self.temporal_frames = config['reid']['temporal_frames']
         self.threshold_reid = config['reid']['threshold']
         self.device = torch.device(config['reid']['device'])
-
-        self.transform = transforms.Compose([
-            transforms.Resize((256, 128)),
-            transforms.ToTensor(),
-            transforms.Normalize(mean=config['reid']['norm_mean'],
-                                 std=config['reid']['norm_std'])
-        ])
 
         use_gpu = config['reid']['device'] in ["cuda", "mps"]
         model_name = config['models']['reid_gpu'] if use_gpu else config['models']['reid_cpu']
@@ -90,18 +58,23 @@ class EnhancedPersonTracker:
         )
 
     def update_gallery(self, pid, feat):
+        """
+        Ajoute le nouvelle Embedding de la personne.
+        :param pid: ID de la personne
+        :param feat: Vecteur de la personne
+        :return: 
+        """
         with self.lock:
             entry = self.tracked_persons[pid]
             features = entry['features']
             entry['features'] = np.vstack((features[-(self.max_gallery_size - 1):], feat))
-            # entry['temp_frames'] = min(entry['temp_frames'] + 1, self.temporal_frames)
-            # if len(entry['features']) > 2:
-            #     pass
-            #     print(cosine(feat, entry['features'][-2]))
 
     def _create_id(self, feat):
-        # if isinstance(feat, torch.Tensor):
-        #    feat = feat.detach().cpu().numpy().squeeze()
+        """
+        Crée une nouvelle ID
+        :param feat: Premier vecteur de la personne
+        :return: Le nouveau ID créé
+        """
         with self.lock:
             pid = self.next_id
             self.next_id += 1
@@ -121,28 +94,32 @@ class EnhancedPersonTracker:
 
     @chrono
     def match_person(self, embed: np.ndarray, assigned_ids: List[int]):
+        """
+        Trouve la personne la plus proche dans la liste de personnes ou en crée une nouvelle ID.
+        :param embed: vecteur de la personne.
+        :param assigned_ids: ids assignés
+        :return: la personne la plus proche.
+        """
         matched_id = None
         best_score = float('inf')
         # print(self.tracked_persons)
         with self.lock:
             for known_id, person in self.tracked_persons.items():
-                person_embed = person['features'].mean(0)
+                #person_embed = person['features'].mean(0)
                 if known_id in assigned_ids:
                     continue
-                # Use multiple reference embeddings for comparison
                 # scores = []
-                # for ref_emb in emb_list[-20:]:  # Use recent embeddings
-                # Try multiple distance metrics
-                cosine_dist = cosine(embed, person_embed)
-                # euclidean_dist = euclidean_distance(embed, person_embed)
+                for ref_emb in person['features'][-20:]:  # Utilise des vecteurs récents
+                    cosine_dist = cosine(embed, ref_emb)
+                    euclidean_dist = euclidean_distance(embed, ref_emb)
 
-                # Combined score
-                # score = 0.7 * float(cosine_dist) + 0.3 * (euclidean_dist / 10.0)
-                score = cosine_dist
-                # Use best match from recent embeddings
-                if score < self.threshold_reid and score < best_score:
-                    best_score = score
-                    matched_id = known_id
+                    # Combined score
+                    score = 0.7 * float(cosine_dist) + 0.3 * (euclidean_dist / 10.0)
+                    #score = cosine_dist
+                    # Use best match from recent embeddings
+                    if score < self.threshold_reid and score < best_score:
+                        best_score = score
+                        matched_id = known_id
 
         if matched_id is None:
             matched_id = self._create_id(embed)
@@ -156,7 +133,7 @@ class EnhancedPersonTracker:
     def get_confirmed_persons(self):
         persons = []
         for pid, person in self.tracked_persons.items():
-            if len(person['features']) >= 100 and not person['saved']:
+            if len(person['features']) >= 50 and not person['saved']:
                 person['saved'] = True
                 person['confirmed'] = True
                 persons.append((pid, "confirmed",

@@ -3,21 +3,23 @@ import threading
 from typing import List, Optional
 
 from PySide6 import QtCore, QtWidgets
-from PySide6.QtGui import QImage, QPixmap, QFont
+from PySide6.QtGui import QImage, QPixmap, QFont, QFontDatabase
 import cv2
 import time
 
-from PySide6.QtWidgets import QLabel
-
-from reid import EnhancedPersonTracker as PersonTracker
+from reid import EnhancedReID as PersonTracker
 from tracking import Camera
-from .app_gui2 import Ui_PersonTracker
+from .app_gui import Ui_PersonTracker
 import queue
 from DB import DB
 
 
 class GUIApp(QtWidgets.QMainWindow, Ui_PersonTracker):
     def __init__(self, config):
+        self.legend_font = QFontDatabase.font("Science Gothic", "Science Gothic Regular", 10)
+        self.number_font = QFontDatabase.font("Science Gothic", "Science Gothic Regular", 10)
+        self.logs_font = QFontDatabase.font("Science Gothic", "Science Gothic Regular", 10)
+
         super().__init__()
         self.person_tracker = PersonTracker(config)
         self.cameras: List[Camera] = []
@@ -64,7 +66,6 @@ class GUIApp(QtWidgets.QMainWindow, Ui_PersonTracker):
         self.update_logs_timer.setInterval(1000 * 2)
         self.update_logs_timer.start()
 
-    @QtCore.Slot()
     def update_nombre_personnes(self):
         nb_persons = self.db.fetch_nb_personnes()[0]
         self.nombres_personnes_label.setText(f"∼ {self.person_tracker.calc_nb_persons(nb_persons)}")
@@ -72,7 +73,9 @@ class GUIApp(QtWidgets.QMainWindow, Ui_PersonTracker):
     def update_logs(self):
         all_ids = []
 
-        ids = list(set(self.cameras[0].current_persons + self.cameras[1].current_persons))
+        for camera in self.cameras:
+            all_ids += camera.current_persons
+        ids = list(set(all_ids))
         if ids:
             persons = self.db.fetch_personnes(ids)
             string = ""
@@ -117,10 +120,17 @@ class GUIApp(QtWidgets.QMainWindow, Ui_PersonTracker):
     def resizeEvent(self, event):
         w = event.size().width()
 
-        font_size = max(13, w // 100)
-        font = QFont()
-        font.setPointSize(font_size)
-        self.logs_personnes.setFont(font)
+        font_size_legend = max(13, w // 60)
+        self.legend_font.setPointSize(font_size_legend)
+        self.label.setFont(self.legend_font)
+
+        font_size_number = max(13, w // 10)
+        self.number_font.setPointSize(font_size_number)
+        self.nombres_personnes_label.setFont(self.number_font)
+
+        font_size_logs = max(13, w // 75)
+        self.logs_font.setPointSize(font_size_logs)
+        self.logs_personnes.setFont(self.logs_font)
 
         super().resizeEvent(event)
 

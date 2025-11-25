@@ -1,16 +1,16 @@
 # Model Configuration
 models:
   yolo: 'models/yolov8n.pt'
-  reid_gpu: 'osnet_x1_0'
+  reid_gpu: 'osnet_ain_x1_0'
   reid_cpu: 'osnet_ain_x1_0'
   reid_num_classes: 1501
 
 # ReID Parameters
 reid:
   alpha: 0.3
-  threshold: 0.4
+  threshold: 0.25
   temporal_frames: 3
-  max_gallery_size: 512
+  max_gallery_size: 100
   height: 256
   width: 128
   norm_mean: [0.485, 0.456, 0.406]
@@ -30,10 +30,10 @@ detection:
   confidence_threshold: 0.5
   person_class_id: 0
   device: "cpu"
-  min_box_ratio: 2
+  min_box_ratio: 1.5
   max_box_ratio: 3.5
-  min_height_box: [100, 100]
-  max_height_box: [200, 200]
+  min_height_box: [180, 100]
+  max_height_box: [300, 200]
 # Paths
 paths:
   embeddings_dir: 'embeddings'
@@ -41,6 +41,6 @@ paths:
 # Video Processing
 video:
   max_videos: 2
-  sources: ["videos_exemples/MOT17-3.webm"]
-  #sources: [0]
+  #sources: ["videos_exemples/MOT17-3.webm"]
+  sources: [0]
   #sources: [0,1]

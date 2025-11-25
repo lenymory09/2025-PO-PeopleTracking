@@ -3,7 +3,6 @@ import gdown
 import os
 
 models_urls = [
-    'https://github.com/ultralytics/assets/releases/download/v8.3.0/yolov8n.pt',
     'https://raw.githubusercontent.com/Serurays/Sample_Detection_Tracking_Yolov8_DeepSORT_Robotics/main/mars-small128.pb'
 ]
 

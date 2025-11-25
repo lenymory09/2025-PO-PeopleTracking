@@ -18,63 +18,43 @@ from PySide6.QtGui import (QBrush, QColor, QConicalGradient, QCursor,
 from PySide6.QtWidgets import (QApplication, QHBoxLayout, QLabel, QMainWindow,
     QSizePolicy, QVBoxLayout, QWidget)
 
-class CameraLabel(QLabel):
-    def __init__(self, parent=None):
-        super().__init__(parent)
-        self.setStyleSheet("background: black;")
-        self.setAlignment(Qt.AlignCenter)
-
-    def resizeEvent(self, event):
-        # Force un ratio 16:9
-
-        w = event.size().width()
-        h = int(w * 9 / 16)
-
-        # Si la hauteur dépasse, on ajuste avec la hauteur
-        if h > event.size().height():
-            h = event.size().height()
-            w = int(h * 16 / 9)
-
-        self.resize(w, h)
-        super().resizeEvent(event)
-
 class Ui_PersonTracker(object):
-    def setupUi(self, main_window):
-        if not main_window.objectName():
-            main_window.setObjectName(u"PersonTracker")
-        #main_window.resize(1919, 1075)
-        # sizePolicy = QSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Preferred)
-        # sizePolicy.setHorizontalStretch(0)
-        # sizePolicy.setVerticalStretch(0)
-        # sizePolicy.setHeightForWidth(main_window.sizePolicy().hasHeightForWidth())
-        # main_window.setSizePolicy(sizePolicy)
-        main_window.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonFollowStyle)
-        self.centralwidget = QWidget(main_window)
+    def setupUi(self, PersonTracker):
+        if not PersonTracker.objectName():
+            PersonTracker.setObjectName(u"PersonTracker")
+        PersonTracker.resize(1919, 1085)
+        sizePolicy = QSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
+        sizePolicy.setHorizontalStretch(0)
+        sizePolicy.setVerticalStretch(0)
+        sizePolicy.setHeightForWidth(PersonTracker.sizePolicy().hasHeightForWidth())
+        PersonTracker.setSizePolicy(sizePolicy)
+        PersonTracker.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonFollowStyle)
+        self.centralwidget = QWidget(PersonTracker)
         self.centralwidget.setObjectName(u"centralwidget")
-        # sizePolicy1 = QSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
-        # sizePolicy1.setHorizontalStretch(0)
-        # sizePolicy1.setVerticalStretch(0)
-        # sizePolicy1.setHeightForWidth(self.centralwidget.sizePolicy().hasHeightForWidth())
-        # self.centralwidget.setSizePolicy(sizePolicy1)
+        sizePolicy.setHeightForWidth(self.centralwidget.sizePolicy().hasHeightForWidth())
+        self.centralwidget.setSizePolicy(sizePolicy)
         self.horizontalLayout = QHBoxLayout(self.centralwidget)
         self.horizontalLayout.setObjectName(u"horizontalLayout")
         self.cameras_layout = QVBoxLayout()
         self.cameras_layout.setObjectName(u"cameras_layout")
-        self.camera_3 = CameraLabel(self.centralwidget)
-        self.camera_3.setObjectName(u"camera_3")
-        # sizePolicy1.setHeightForWidth(self.camera_3.sizePolicy().hasHeightForWidth())
-        # self.camera_3.setSizePolicy(sizePolicy1)
-        #self.camera_3.setScaledContents(True)
+        self.camera_1 = QLabel(self.centralwidget)
+        self.camera_1.setObjectName(u"camera_1")
+        sizePolicy.setHeightForWidth(self.camera_1.sizePolicy().hasHeightForWidth())
+        self.camera_1.setSizePolicy(sizePolicy)
+        self.camera_1.setStyleSheet(u"background: black;")
+        self.camera_1.setScaledContents(True)
 
-        self.cameras_layout.addWidget(self.camera_3)
+        self.cameras_layout.addWidget(self.camera_1)
 
-        self.camera_4 = CameraLabel(self.centralwidget)
-        self.camera_4.setObjectName(u"camera_4")
-        # sizePolicy1.setHeightForWidth(self.camera_4.sizePolicy().hasHeightForWidth())
-        #self.camera_4.setSizePolicy(sizePolicy1)
-        #self.camera_4.setScaledContents(True)
+        self.camera_2 = QLabel(self.centralwidget)
+        self.camera_2.setObjectName(u"camera_2")
+        self.camera_2.setEnabled(True)
+        sizePolicy.setHeightForWidth(self.camera_2.sizePolicy().hasHeightForWidth())
+        self.camera_2.setSizePolicy(sizePolicy)
+        self.camera_2.setStyleSheet(u"background: black;")
+        self.camera_2.setScaledContents(True)
 
-        self.cameras_layout.addWidget(self.camera_4)
+        self.cameras_layout.addWidget(self.camera_2)
 
 
         self.horizontalLayout.addLayout(self.cameras_layout)
@@ -87,8 +67,8 @@ class Ui_PersonTracker(object):
         self.verticalLayout_2.setObjectName(u"verticalLayout_2")
         self.label = QLabel(self.verticalWidget)
         self.label.setObjectName(u"label")
-        # sizePolicy1.setHeightForWidth(self.label.sizePolicy().hasHeightForWidth())
-        # self.label.setSizePolicy(sizePolicy1)
+        sizePolicy.setHeightForWidth(self.label.sizePolicy().hasHeightForWidth())
+        self.label.setSizePolicy(sizePolicy)
         font = QFont()
         font.setPointSize(20)
         self.label.setFont(font)
@@ -98,8 +78,8 @@ class Ui_PersonTracker(object):
 
         self.nombres_personnes_label = QLabel(self.verticalWidget)
         self.nombres_personnes_label.setObjectName(u"nombres_personnes_label")
-        # sizePolicy1.setHeightForWidth(self.nombres_personnes_label.sizePolicy().hasHeightForWidth())
-        # self.nombres_personnes_label.setSizePolicy(sizePolicy1)
+        sizePolicy.setHeightForWidth(self.nombres_personnes_label.sizePolicy().hasHeightForWidth())
+        self.nombres_personnes_label.setSizePolicy(sizePolicy)
         font1 = QFont()
         font1.setPointSize(75)
         font1.setBold(False)
@@ -114,8 +94,8 @@ class Ui_PersonTracker(object):
 
         self.logs_personnes = QLabel(self.verticalWidget)
         self.logs_personnes.setObjectName(u"logs_personnes")
-        # sizePolicy1.setHeightForWidth(self.logs_personnes.sizePolicy().hasHeightForWidth())
-        # self.logs_personnes.setSizePolicy(sizePolicy1)
+        sizePolicy.setHeightForWidth(self.logs_personnes.sizePolicy().hasHeightForWidth())
+        self.logs_personnes.setSizePolicy(sizePolicy)
         font2 = QFont()
         font2.setPointSize(15)
         self.logs_personnes.setFont(font2)
@@ -126,22 +106,20 @@ class Ui_PersonTracker(object):
 
 
         self.horizontalLayout.addWidget(self.verticalWidget)
-        self.horizontalLayout.setStretch(0, 1)  # cameras_layout
-        self.horizontalLayout.setStretch(1, 1)  # verticalWidget
 
-        main_window.setCentralWidget(self.centralwidget)
+        PersonTracker.setCentralWidget(self.centralwidget)
 
-        self.retranslateUi(main_window)
+        self.retranslateUi(PersonTracker)
 
-        QMetaObject.connectSlotsByName(main_window)
+        QMetaObject.connectSlotsByName(PersonTracker)
     # setupUi
 
     def retranslateUi(self, PersonTracker):
         PersonTracker.setWindowTitle(QCoreApplication.translate("PersonTracker", u"PersonTracker", None))
-        self.camera_3.setText(QCoreApplication.translate("PersonTracker", u"TextLabel", None))
-        self.camera_4.setText(QCoreApplication.translate("PersonTracker", u"TextLabel", None))
-        self.label.setText(QCoreApplication.translate("PersonTracker", u"Nombres de personnes estim\u00e9s :", None))
+        self.camera_1.setText("")
+        self.camera_2.setText("")
+        self.label.setText(QCoreApplication.translate("PersonTracker", u"Nombre de personnes estim\u00e9 :", None))
         self.nombres_personnes_label.setText(QCoreApplication.translate("PersonTracker", u"0", None))
-        self.logs_personnes.setText(QCoreApplication.translate("PersonTracker", u"TextLabel", None))
+        self.logs_personnes.setText(QCoreApplication.translate("PersonTracker", u"Pas encore de visites", None))
     # retranslateUi
 

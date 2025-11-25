@@ -45,6 +45,7 @@ class DB:
         for command in commands:
             cursor_root.execute(command)
 
+        # Ancien code DB (inutile car 1 seul endroit)
         # cursor_root.executemany("""
         #                     -- Création de la base de données
         #                     CREATE DATABASE IF NOT EXISTS IA_DB;
@@ -116,16 +117,29 @@ class DB:
         # Sauvegarder les changements
         self.conn.commit()
 
-    def insert_visites(self, personnes):
+    def insert_visites(self, personnes) -> None:
+        """
+        Insertion des personnes qui ont visité dans la BDD
+        :param personnes: personnes à rajouter
+        """
         self.cursor.executemany("INSERT INTO visites (id_personne, state, timestamp) VALUES (%s,%s,%s)", personnes)
         self.conn.commit()
 
     def fetch_nb_personnes(self):
+        """
+        Chargement du nombre de personnes depuis la BDD
+        :return: le nombre de personnes dans la BDD
+        """
         self.cursor.execute("SELECT COUNT(*) as nb_personnes FROM visites")
         return self.cursor.fetchone()
 
 
     def fetch_personnes(self, ids):
+        """
+        Charge les personnes de la BDD
+        :param ids: ids des personnes
+        :return: les personnes demandé
+        """
         placeholders = ', '.join(['%s'] * len(ids))
         query = f"SELECT v.id_personne, TIME(v.timestamp) FROM visites v WHERE v.id_personne IN ({placeholders})"
         self.cursor.execute(query, ids)

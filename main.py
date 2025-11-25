@@ -3,7 +3,6 @@ import sys
 import yaml
 from PySide6 import QtWidgets
 from gui import GUIApp
-import tensorflow as tf
 
 def load_config():
     with open('config.yaml', 'r') as file:

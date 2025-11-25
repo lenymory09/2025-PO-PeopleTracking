@@ -10,12 +10,14 @@ le nombre de personnes qui vont devant la caméra et qui enregistre les heures d
 
 ## Installation
 Pour installer le projet voici les étapes :
+
 1. Cloner / Télécharger le projet. :
 ```bash
 git clone https://github.com/lenymory09/2025-PO-PeopleTracking
 cd 2025-PO-PeopleTracking
 ```
-2. Créer un environement conda (si conda n'est pas installé, installez le svp).
+
+2. Créer un environnement conda et installer les dépendances python : 
 ```bash
 conda create --name people_tracking python=3.10
 conda activate people_tracking
@@ -26,12 +28,35 @@ pip install -r requirements.txt
 python download_models.py
 ```
 
-4. Si vous êtes sur un PC Nvidia veuillez installer cuda pour la rapidité. Et installer les librairies pour :
+4. Cloner le dépot DeepSort.
 ```bash
-
+cd tracking
+git clone https://github.com/nwojke/deep_sort
+cd ..
 ```
-5. 
 
+5. Créer un fichier .env à la racine avec le mdp et la db à utiliser :
+```text
+MYSQL_USER=root
+MYSQL_PASSWORD=<mot de passe de la section>
+MYSQL_DB=IA_DB
+MYSQL_HOST=localhost
+```
+
+6. Installer la police `gui/fonts/ScienceGothic-Variable.ttf`
+
+7. Modifier le config.yaml pour mettre les cameras :
+```yaml
+video:
+  max_videos: 2
+  sources: [0,1] # caméras
+  # sources: ["videos_exemples/MOT17-1.webm", "videos_exemples/MOT17-2.webm"] # ou des vidéos
+```
+
+8. Lancer le projet.
+```bash
+python main.py
+```
 
 ## Algorithmes utilisés
 
@@ -51,15 +76,22 @@ python download_models.py
 
 
 ## Structure du projet
-- `DB/`: fichiers de la DB
-- `gui/`: Fichiers de la GUI 
-- `reid/`: Fichier de la reid 
-- `tracking/`: contient les fichiers pour gérés le tracking et le traitement du flux.
-- `videos_exemples/`: vidéos d'exemples
-- `config.yaml` : Fichier de configuration du projet.
-- `main.py`: Point d'entrée du programme.
-- `models/` : Répertoire qui contient les modèles pré-entrainés
-
+```
+├──DB/   -> fichiers de la DB
+├──gui/  -> Fichiers de la GUI (Lance le projet)
+│   ├── app_gui.py -> Fichier contenant la structure de la GUI Qt de base.
+│   ├── gui.py  -> gère GUI et lancement du projet.
+│   ├── gui.ui  -> Qt Designer App
+│   └── fonts/  -> Polices 
+├──reid/        -> Scripts Reid (Permettant de gérer la reconnaissance des peronnes)
+    ├──reid.py  -> 
+├──tracking/ -> contient les fichiers pour gérés le tracking et le traitement du flux.
+├──videos_exemples/ -> vidéos d'exemples (Multi Object Tracking challenge)
+├──config.yaml -> Fichier de configuration du projet.
+├──main.py     -> Point d'entrée du programme.
+├──models/     -> Répertoire qui contient les modèles pré-entrainés
+└──.env        -> Variable d'environnement (contient infos DB)
+```
 ## Remerciements
 Ce projet est basé sur plusieurs autres projets :
 - https://github.com/baseershah7/Multi_Camera_Surveillance_Person_Reid_Tracking

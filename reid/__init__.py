@@ -1,3 +1,3 @@
-from .person_tracker import EnhancedPersonTracker
+from .reid import EnhancedReID
 
-__all__ = ["EnhancedPersonTracker"]
+__all__ = ["EnhancedReID"]
