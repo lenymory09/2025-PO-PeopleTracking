@@ -7,11 +7,11 @@
     <x>0</x>
     <y>0</y>
     <width>1919</width>
-    <height>1075</height>
+    <height>1085</height>
    </rect>
   </property>
   <property name="sizePolicy">
-   <sizepolicy hsizetype="Expanding" vsizetype="Preferred">
+   <sizepolicy hsizetype="Expanding" vsizetype="Expanding">
     <horstretch>0</horstretch>
     <verstretch>0</verstretch>
    </sizepolicy>
@@ -33,15 +33,18 @@
     <item>
      <layout class="QVBoxLayout" name="cameras_layout">
       <item>
-       <widget class="QLabel" name="camera_3">
+       <widget class="QLabel" name="camera_1">
         <property name="sizePolicy">
          <sizepolicy hsizetype="Expanding" vsizetype="Expanding">
           <horstretch>0</horstretch>
           <verstretch>0</verstretch>
          </sizepolicy>
         </property>
+        <property name="styleSheet">
+         <string notr="true">background: black;</string>
+        </property>
         <property name="text">
-         <string>TextLabel</string>
+         <string/>
         </property>
         <property name="scaledContents">
          <bool>true</bool>
@@ -49,15 +52,21 @@
        </widget>
       </item>
       <item>
-       <widget class="QLabel" name="camera_4">
+       <widget class="QLabel" name="camera_2">
+        <property name="enabled">
+         <bool>true</bool>
+        </property>
         <property name="sizePolicy">
          <sizepolicy hsizetype="Expanding" vsizetype="Expanding">
           <horstretch>0</horstretch>
           <verstretch>0</verstretch>
          </sizepolicy>
         </property>
+        <property name="styleSheet">
+         <string notr="true">background: black;</string>
+        </property>
         <property name="text">
-         <string>TextLabel</string>
+         <string/>
         </property>
         <property name="scaledContents">
          <bool>true</bool>
@@ -85,7 +94,7 @@
             </font>
            </property>
            <property name="text">
-            <string>Nombres de personnes estimés :</string>
+            <string>Nombre de personnes estimé :</string>
            </property>
            <property name="alignment">
             <set>Qt::AlignmentFlag::AlignBottom|Qt::AlignmentFlag::AlignHCenter</set>
@@ -131,7 +140,7 @@
           </font>
          </property>
          <property name="text">
-          <string>TextLabel</string>
+          <string>Pas encore de visites</string>
          </property>
          <property name="alignment">
           <set>Qt::AlignmentFlag::AlignLeading|Qt::AlignmentFlag::AlignLeft|Qt::AlignmentFlag::AlignTop</set>

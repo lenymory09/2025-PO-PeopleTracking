@@ -3,9 +3,6 @@ import sys
 import yaml
 from PySide6 import QtWidgets
 from gui import GUIApp
-import tensorflow as tf
-
-#tf.config.set_visible_devices([], 'GPU')
 
 def load_config():
     with open('config.yaml', 'r') as file:
@@ -26,7 +23,9 @@ def main():
     gui_app = GUIApp(main_config)
     gui_app.show()
     gui_app.start_processing()
-    sys.exit(app.exec())
+    status = app.exec()
+    gui_app.release_ressources()
+    sys.exit(status)
 
 if __name__ == "__main__":
     main()
