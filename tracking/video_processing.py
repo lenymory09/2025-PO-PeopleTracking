@@ -244,6 +244,9 @@ class Camera:
 
         return frame
 
+    def release(self):
+        self.cap.release()
+
     def run(self):
         # try:
         self.running = True

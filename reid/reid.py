@@ -28,7 +28,8 @@ class EnhancedReID:
         self.temporal_frames = config['reid']['temporal_frames']
         self.threshold_reid = config['reid']['threshold']
         self.device = torch.device(config['reid']['device'])
-
+        self.reid_config = config['reid']
+        self.embeddings_path = config['paths']['embeddings_dir']
         use_gpu = config['reid']['device'] in ["cuda", "mps"]
         model_name = config['models']['reid_gpu'] if use_gpu else config['models']['reid_cpu']
 
@@ -133,7 +134,7 @@ class EnhancedReID:
     def get_confirmed_persons(self):
         persons = []
         for pid, person in self.tracked_persons.items():
-            if len(person['features']) >= 50 and not person['saved']:
+            if len(person['features']) >= self.reid_config['min_features_confirmed'] and not person['saved']:
                 person['saved'] = True
                 person['confirmed'] = True
                 persons.append((pid, "confirmed",
@@ -162,3 +163,87 @@ class EnhancedReID:
         nb_embeddings = len(self.tracked_persons[pid]['features'])
         label = f"ID {pid} : {'Max' if nb_embeddings == self.max_gallery_size else nb_embeddings}"
         return label
+
+    def save_features(self):
+        """
+        Save feature embeddings to disk
+        """
+        embeddings_dir = os.path.join(os.getcwd(), self.embeddings_path)
+        os.makedirs(embeddings_dir, exist_ok=True)
+
+        for nom in os.listdir(embeddings_dir):
+            chemin = os.path.join(embeddings_dir, nom)
+            if os.path.isfile(chemin):
+                os.remove(chemin)
+
+        saved_count = 0
+        with self.lock:
+            for pid, person in self.tracked_persons.items():
+                features = person['features']
+                name = person['name']
+                color = person['color']
+                temp_frames = person['temp_frames']
+                confirmed = person['confirmed']
+                saved = person['saved']
+                timestamp = person['timestamp']
+                file_path = os.path.join(embeddings_dir, f"{pid}.npz")
+                np.savez(file_path, features=features, name=name, color=color, temp_frames=temp_frames, confirmed=confirmed, saved=saved, timestamp=timestamp)
+                saved_count += 1
+
+        print(f"Saved {saved_count} embeddings to {embeddings_dir}")
+        return saved_count
+
+    def load_features(self):
+        """
+        Charge les features enregistrés sur le disque
+        """
+        embeddings_dir = os.path.join(os.getcwd(), self.embeddings_path)
+        if not os.path.exists(embeddings_dir):
+            print("No embeddings directory found.")
+            return 0
+
+        loaded_count = 0
+        loaded_pids = []
+
+        with self.lock:
+            for file_name in os.listdir(embeddings_dir):
+                if not file_name.endswith('.npz'):
+                    continue
+
+                pid_str = os.path.splitext(file_name)[0]
+                try:
+                    pid = int(pid_str)
+                except ValueError:
+                    continue
+
+                file_path = os.path.join(embeddings_dir, file_name)
+                data = np.load(file_path, allow_pickle=True)
+
+                features = data['features']
+                name = data['name'].item() if 'name' in data else None
+                color = tuple(data['color'].tolist())
+                temp_frames = data['temp_frames'].item() if 'temp_frames' in data else 0
+
+                features = features[-self.max_gallery_size:]
+
+                self.tracked_persons[pid] = {
+                    'features': features,
+                    'temp_frames': temp_frames,
+                    'name': name,
+                    'color': color,
+                    'confirmed': False,
+                    'saved': False,
+                    'timestamp': int(time())
+                }
+                self.color_map[pid] = color
+                loaded_pids.append(pid)
+                loaded_count += 1
+
+            if loaded_pids:
+                max_pid = max(loaded_pids)
+                if max_pid >= self.next_id:
+                    self.next_id = max_pid + 1
+
+            print(f"Loaded {loaded_count} embeddings from {embeddings_dir}")
+            return loaded_count
+

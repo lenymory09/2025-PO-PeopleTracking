@@ -16,6 +16,7 @@ reid:
   norm_mean: [0.485, 0.456, 0.406]
   norm_std: [0.229, 0.224, 0.225]
   device: "cpu"
+  min_features_confirmed: 15
 
 # Tracker Parameters
 tracker:
@@ -32,8 +33,11 @@ detection:
   device: "cpu"
   min_box_ratio: 1.5
   max_box_ratio: 3.5
-  min_height_box: [180, 100]
-  max_height_box: [300, 200]
+
+  min_height_box: [0, 0]
+  max_height_box: [1000, 1000]
+  #min_height_box: [180, 100]
+  #max_height_box: [300, 200]
 # Paths
 paths:
   embeddings_dir: 'embeddings'
@@ -41,6 +45,6 @@ paths:
 # Video Processing
 video:
   max_videos: 2
-  #sources: ["videos_exemples/MOT17-3.webm"]
-  sources: [0]
+  sources: ["videos_exemples/MOT17-1.webm"]
+  #sources: [0]
   #sources: [0,1]

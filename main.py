@@ -23,7 +23,9 @@ def main():
     gui_app = GUIApp(main_config)
     gui_app.show()
     gui_app.start_processing()
-    sys.exit(app.exec())
+    status = app.exec()
+    gui_app.release_ressources()
+    sys.exit(status)
 
 if __name__ == "__main__":
     main()

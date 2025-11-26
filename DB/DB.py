@@ -14,7 +14,6 @@ class DB:
     def __init__(self):
         self.conn: Optional[mysql.connector.MySQLConnection] = None
         self.cursor: Optional[MySQLCursorAbstract] = None
-        self.create_db()
         self.connect_db()
 
     # créer la base de données
