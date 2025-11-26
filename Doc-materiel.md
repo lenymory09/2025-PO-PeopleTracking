@@ -6,7 +6,9 @@
   
   * Linksys AIF-101271
   
-  * C930e Webcam Logitech 1x 
+  * C930e Webcam Logitech 1x
+
+  * MIN-100953 Intel NUC 
 
 ## *Matériel Mac Studio* 
 
@@ -15,5 +17,6 @@
   * USB-C mini dock 2x 
 
   * Mac studio 
+
 
   
