@@ -8,12 +8,11 @@
 
   * Intel Nuc i5 gen10 **2x** AIF-101266 AIF-101265
 
+  * C930e Webcam Logitech **1x** 
+
 ## *Matériel Mac Studio* 
 
-  * 1x Souris pour mac
-
-  * 1x Clavier pour mac
-
+  * 1x Switch KVM 
   * USB-C mini dock 2x 
 
   * Mac studio 
