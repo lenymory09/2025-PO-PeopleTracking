@@ -58,14 +58,17 @@ class Track:
     """
     Classe représentant un Track DeepSORT
     """
+
     def __init__(self, track_id, bbox):
         self.track_id = track_id
         self.bbox = bbox
+
 
 class DeepSortWrapper:
     """
     Classe qui gère l'algorithme DeepSORT dans le projet.
     """
+
     def __init__(self, model_filename='models/mars-small128.pb', max_cosine_distance=0.4, nn_budget=None):
         metric = nn_matching.NearestNeighborDistanceMetric("cosine", max_cosine_distance, nn_budget)
         self.tracker = DeepSortTracker(metric)
@@ -140,6 +143,8 @@ class Camera:
         )
         self.ultrackid_to_pid: Dict[int, int] = {}
         self.current_persons = []
+
+        self.passages_entrees = {}
 
     def get_tracked_pids(self) -> List[int]:
         """
@@ -272,9 +277,84 @@ class Camera:
             sleep_time = max(0.0, frame_interval - elapsed)
             time.sleep(sleep_time)
 
-    # except Exception as e:
-    #     print(f"Processor {self.source} crashed: {e}")
+    def run_tracking(self):
+        # try:
+            self.running = True
+            fps = self.cap.get(cv2.CAP_PROP_FPS)
+            frame_interval = max(0.001, 1 / fps) if fps > 0 else 0.033
 
-    # finally:
-    #     # Make sure resources are always released
-    #     print(f"Processor {self.source} exited")
+            # Main processing loop
+            while self.running and self.cap.isOpened():
+                start_time = time.time()
+                ret, frame = self.cap.read()
+                if not ret:
+                    break
+                processed = self.process_tracking(frame)
+
+                # Send frame to UI
+                try:
+                    self.frame_queue.put_nowait((self.vid_idx, processed))
+                except queue.Full:
+                    pass
+
+                # Control frame rate
+                elapsed = time.time() - start_time
+                sleep_time = max(0.0, frame_interval - elapsed)
+                time.sleep(sleep_time)
+
+        # except Exception as e:
+        #     print(f"Processor {self.source} crashed: {e}")
+
+        # finally:
+        #     # Make sure resources are always released
+        #     print(f"Processor {self.source} exited")
+
+    def update_passages(self, tracks, features):
+        for track, feat in zip(tracks, features):
+            passage = self.passages_entrees.get(track.track_id)
+            feat = feat.detach().cpu().numpy()
+            if passage is None:
+                passage = {
+                    "features": np.array([feat]),
+                }
+                self.passages_entrees[track.track_id] = passage
+            else:
+                track_feats = passage['features']
+                passage['features'] = np.vstack((track_feats[-(100 - 1):], feat))
+
+
+    def process_tracking(self, frame):
+        height, width, _ = frame.shape
+        self.frame_count += 1
+
+        detections, boxes = self.generate_detections(frame)
+
+        self.ultracker.update(frame, detections)
+        tracks = self.ultracker.tracks
+
+        # tracks = self.tracker.update_tracks(detections, frame=frame)
+        bboxes = []
+        crops = []
+
+        # Process confirmed tracks
+        for trk in tracks:
+            l, t, r, b = trk.bbox
+            bboxes.append(trk.bbox)
+            bbox = (l, t, r - l, b - t)
+            crops.append(extract_image_patch(frame, bbox, (256, 128)))
+
+        if crops:
+            features = self.reid.extract_features(crops)
+        else:
+            features = None
+
+
+        if crops:
+            self.update_passages(tracks, features)
+            for track, feat, bbox in zip(tracks, features, bboxes):
+                x1, y1, x2, y2 = track.bbox
+                print(f"Camera {self.vid_idx} : {track.track_id} : {x2 - x1} / {y2 - y1}")
+                label = f"Passage {track.track_id}"
+                draw_person_box(frame, bbox, label, (0,0,255))
+
+        return frame

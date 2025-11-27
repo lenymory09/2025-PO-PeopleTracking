@@ -8,7 +8,7 @@ models:
 # ReID Parameters
 reid:
   alpha: 0.3
-  threshold: 0.25
+  threshold: 0.3
   temporal_frames: 3
   max_gallery_size: 100
   height: 256
@@ -31,7 +31,7 @@ detection:
   confidence_threshold: 0.5
   person_class_id: 0
   device: "cpu"
-  min_box_ratio: 1.5
+  min_box_ratio: 1.2
   max_box_ratio: 3.5
 
   min_height_box: [0, 0]
@@ -45,6 +45,6 @@ paths:
 # Video Processing
 video:
   max_videos: 2
-  sources: ["videos_exemples/MOT17-1.webm"]
+  sources: ["videos_exemples/MOT17-1.webm", "videos_exemples/MOT17-1.webm"]
   #sources: [0]
   #sources: [0,1]
