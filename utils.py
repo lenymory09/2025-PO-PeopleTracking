@@ -5,6 +5,10 @@ import cv2
 
 
 def chrono(fn):
+    """
+    Mesure le temps que prend une fonction à s'exécuter et l'affiche dans la console.
+    :param fn: Fonction à mesurer
+    """
     def wrapper(*args):
         before = time()
         result = fn(*args)
@@ -15,6 +19,12 @@ def chrono(fn):
 
 
 def euclidean_distance(emb1: np.ndarray, emb2: np.ndarray):
+    """
+    Calcule la distance euclidean entre plusieurs embeddings
+    :param emb1: premiere feature
+    :param emb2: deuzième feature
+    :return: la distance entre les deux.
+    """
     return np.linalg.norm(emb1 - emb2)
 
 

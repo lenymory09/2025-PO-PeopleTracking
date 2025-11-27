@@ -96,7 +96,8 @@ class EnhancedReID:
     @chrono
     def match_person(self, embed: np.ndarray, assigned_ids: List[int]):
         """
-        Trouve la personne la plus proche dans la liste de personnes ou en crée une nouvelle ID.
+        Trouve la personne la plus proche avec la distance cosinus dans la
+        liste de personnes ou en crée une nouvelle ID.
         :param embed: vecteur de la personne.
         :param assigned_ids: ids assignés
         :return: la personne la plus proche.
@@ -106,21 +107,20 @@ class EnhancedReID:
         # print(self.tracked_persons)
         with self.lock:
             for known_id, person in self.tracked_persons.items():
-                #person_embed = person['features'].mean(0)
+                person_embed = person['features'].mean(0)
                 if known_id in assigned_ids:
                     continue
-                # scores = []
-                for ref_emb in person['features'][-20:]:  # Utilise des vecteurs récents
-                    cosine_dist = cosine(embed, ref_emb)
-                    euclidean_dist = euclidean_distance(embed, ref_emb)
+                #for ref_emb in person['features']:
+                cosine_dist = cosine(embed, person_embed)
+                #euclidean_dist = euclidean_distance(embed, ref_emb)
 
-                    # Combined score
-                    score = 0.7 * float(cosine_dist) + 0.3 * (euclidean_dist / 10.0)
-                    #score = cosine_dist
-                    # Use best match from recent embeddings
-                    if score < self.threshold_reid and score < best_score:
-                        best_score = score
-                        matched_id = known_id
+                # Combined score (pas utilisé)
+                #score = 0.7 * float(cosine_dist) + 0.3 * (euclidean_dist / 10.0)
+                score = cosine_dist
+                # Use best match from recent embeddings
+                if score < self.threshold_reid and score < best_score:
+                    best_score = score
+                    matched_id = known_id
 
         if matched_id is None:
             matched_id = self._create_id(embed)
