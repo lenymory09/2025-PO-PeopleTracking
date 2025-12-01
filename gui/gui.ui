@@ -94,7 +94,7 @@
             </font>
            </property>
            <property name="text">
-            <string>Nombre de personnes estimé :</string>
+            <string>Nombre de personnes entrés :</string>
            </property>
            <property name="alignment">
             <set>Qt::AlignmentFlag::AlignBottom|Qt::AlignmentFlag::AlignHCenter</set>

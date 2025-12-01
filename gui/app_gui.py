@@ -118,7 +118,7 @@ class Ui_PersonTracker(object):
         PersonTracker.setWindowTitle(QCoreApplication.translate("PersonTracker", u"PersonTracker", None))
         self.camera_1.setText("")
         self.camera_2.setText("")
-        self.label.setText(QCoreApplication.translate("PersonTracker", u"Nombre de personnes estim\u00e9 :", None))
+        self.label.setText(QCoreApplication.translate("PersonTracker", u"Nombre de personnes entr\u00e9s :", None))
         self.nombres_personnes_label.setText(QCoreApplication.translate("PersonTracker", u"0", None))
         self.logs_personnes.setText(QCoreApplication.translate("PersonTracker", u"Pas encore de visites", None))
     # retranslateUi

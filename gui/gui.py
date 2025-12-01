@@ -18,7 +18,7 @@ from DB import DB
 
 class GUIApp(QtWidgets.QMainWindow, Ui_PersonTracker):
     """
-    Classe de la GUI
+    Classe de la GUI PySide6
     """
 
     def __init__(self, config):
@@ -57,7 +57,8 @@ class GUIApp(QtWidgets.QMainWindow, Ui_PersonTracker):
         """
         self.timer_update_persons = QtCore.QTimer(self)
         self.timer_update_persons.timeout.connect(self.update_nombre_personnes)
-        self.timer_update_persons.start(1)
+        self.timer_update_persons.setInterval(1000)
+        self.timer_update_persons.start()
         self.running = True
 
         self.processors = []

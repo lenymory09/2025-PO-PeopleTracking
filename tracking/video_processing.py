@@ -58,14 +58,17 @@ class Track:
     """
     Classe représentant un Track DeepSORT
     """
+
     def __init__(self, track_id, bbox):
         self.track_id = track_id
         self.bbox = bbox
+
 
 class DeepSortWrapper:
     """
     Classe qui gère l'algorithme DeepSORT dans le projet.
     """
+
     def __init__(self, model_filename='models/mars-small128.pb', max_cosine_distance=0.4, nn_budget=None):
         metric = nn_matching.NearestNeighborDistanceMetric("cosine", max_cosine_distance, nn_budget)
         self.tracker = DeepSortTracker(metric)
