@@ -10,13 +10,6 @@ from utils import euclidean_distance, chrono
 import threading
 from time import time
 
-torch.set_num_threads(os.cpu_count())
-
-MODELS_PATH = {
-    "osnet_x1_0": "models/osnet_x1_0_msmt17_combineall_256x128_amsgrad_ep150_stp60_lr0.0015_b64_fb10_softmax_labelsmooth_flip_jitter.pth",
-    "osnet_ain_x1_0": "models/osnet_ain_x1_0_msmt17_256x128_amsgrad_ep50_lr0.0015_coslr_b64_fb10_softmax_labsmth_flip_jitter.pth"
-}
-
 class EnhancedReID:
     def __init__(self, config):
         self.tracked_persons = {}
@@ -25,13 +18,13 @@ class EnhancedReID:
         self.next_id = 0
         self.color_map = {}
         self.max_gallery_size = config['reid']['max_gallery_size']
-        self.temporal_frames = config['reid']['temporal_frames']
         self.threshold_reid = config['reid']['threshold']
         self.device = torch.device(config['reid']['device'])
         self.reid_config = config['reid']
         self.embeddings_path = config['paths']['embeddings_dir']
         use_gpu = config['reid']['device'] in ["cuda", "mps"]
-        model_name = config['models']['reid_gpu'] if use_gpu else config['models']['reid_cpu']
+        model_name = config['models']['reid']
+        model_file = config['models']['reid_model_file']
 
         # self.reid_model = torchreid.models.build_model(
         #    name=model_name,
@@ -53,7 +46,7 @@ class EnhancedReID:
 
         self.feature_extractor = torchreid.utils.FeatureExtractor(
             model_name=model_name,
-            model_path=MODELS_PATH[model_name],
+            model_path=model_file,
             verbose=False,
             device=config['reid']['device']
         )

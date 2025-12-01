@@ -20,6 +20,7 @@ class GUIApp(QtWidgets.QMainWindow, Ui_PersonTracker):
     """
     Classe de la GUI PySide6
     """
+
     def __init__(self, config):
         super().__init__()
 
@@ -71,6 +72,7 @@ class GUIApp(QtWidgets.QMainWindow, Ui_PersonTracker):
                 threading.Thread(target=cam.run, daemon=True).start()
             else:
                 threading.Thread(target=cam.run_tracking, daemon=True).start()
+
         self.update_thread = threading.Thread(target=self.update_frames, daemon=True)
         self.update_thread.start()
 
@@ -95,12 +97,11 @@ class GUIApp(QtWidgets.QMainWindow, Ui_PersonTracker):
         """
         self.reid.save_features()
 
-
     def update_nombre_personnes(self):
         """
         Modifie le nombre de personne affiché
         """
-        #nb_persons = self.db.fetch_nb_personnes()[0]
+        # nb_persons = self.db.fetch_nb_personnes()[0]
         if len(self.cameras) == 2:
             nb_persons = (len(self.cameras[1].passages_entrees) + self.start_nb_passages) // 2
             self.nombres_personnes_label.setText(f"∼ {nb_persons}")
@@ -210,6 +211,7 @@ class GUIApp(QtWidgets.QMainWindow, Ui_PersonTracker):
             return 0
         with open("nb_persons.txt", "r") as f:
             return int(f.read())
+
 
 if __name__ == "__main__":
     app = QtWidgets.QApplication([])
