@@ -69,15 +69,41 @@ python main.py
 
 ## Fonctionnement
 1. Lecture de l'image de la caméra.
-2. Détection des personnes dans l'image avec YOLO.
-3. Génération des features (vecteurs mathématiques) des gens sur l'image avec OSNet AIN.
+2. YOLO détecte tous les objets dans la frame.
+- On filtre pour garder uniquement la classe **person**.
+- Chaque détection contient :
+  - bounding box `(x1, y1, x2, y2)`
+  - score de confiance
+  - classe
+3. Génération des features avec OSNet-AIN
+- Chaque personne détectée est :
+  - recadrée
+  - redimensionnée
+  - normalisée
+- L’image est passée dans **OSNet-AIN**, qui génère un **embedding** :
+  - vecteur de 512 ou 2048 valeurs
+- Cet embedding représente la “signature” unique d’une personne.
 4. Tracking des personnes sur l'image par rapport aux features.
-5. 2e caméra utilisé pour pour le comptage des personnes qui rentre.
-6. Si les personnes viennent d'arriver sur le plan alors il les réidentifie avec OSNet AIN.
+Basé sur :
+  - positions des bbox
+  - mouvement
+  - cohérence temporelle
+- Donne un ID par suivi temporel.
+5. 2e caméra utilisé pour le comptage des personnes qui rentre.
+6. Si les personnes viennent d'arriver sur le plan alors il les réidentifie avec OSNet AIN. 
+- Si l’embedding correspond à une identité existante :
+- attribution du même ID global.
+- Sinon :
+  - création d’un **nouvel ID global**
+  - ajout dans la galerie.
 7. Mise à jour de la galerie de features.
 8. Dessiner des boîtes pour les personnes avec leur ID sur l'image
 9. Affichage de l'image dans la GUI PySide6 (Qt)
-
+- Conversion BGR → RGB → `QImage`.
+- Transformation en `QPixmap`.
+- Affichage via :
+  - `QLabel`
+  - ou un widget Qt personnalisé.
 
 ## Structure du projet
 ```
