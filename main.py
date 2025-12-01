@@ -25,6 +25,7 @@ def main():
     gui_app.start_processing()
     status = app.exec()
     gui_app.release_ressources()
+    gui_app.save_nombres_persons()
     sys.exit(status)
 
 if __name__ == "__main__":

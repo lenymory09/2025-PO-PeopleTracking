@@ -16,19 +16,11 @@ import queue
 from DB import DB
 
 
-# class Worker(QThread):
-#     def __init__(self, camera: Camera):
-#         super().__init__()
-#         self.camera = camera
-#
-#     def run(self):
-#         self.camera.run()
-
-
 class GUIApp(QtWidgets.QMainWindow, Ui_PersonTracker):
     """
     Classe de la GUI
     """
+
     def __init__(self, config):
         super().__init__()
 
@@ -54,6 +46,10 @@ class GUIApp(QtWidgets.QMainWindow, Ui_PersonTracker):
         self.reid.load_features()
         if not os.path.exists(os.path.join(os.getcwd(), self.reid.embeddings_path)):
             self.db.create_db()
+            self.start_nb_passages = 0
+        else:
+            nb_passage = self.load_nb_persons()
+            self.start_nb_passages = nb_passage
 
     def start_processing(self):
         """
@@ -71,9 +67,10 @@ class GUIApp(QtWidgets.QMainWindow, Ui_PersonTracker):
             self.frame_queues[i] = frame_queue
             cam.frame_queue = frame_queue
             self.processors.append(cam)
-            # worker = Worker(cam)
-            # worker.run()
-            threading.Thread(target=cam.run, daemon=True).start()
+            if i == 0:
+                threading.Thread(target=cam.run, daemon=True).start()
+            else:
+                threading.Thread(target=cam.run_tracking, daemon=True).start()
 
         self.update_thread = threading.Thread(target=self.update_frames, daemon=True)
         self.update_thread.start()
@@ -99,13 +96,14 @@ class GUIApp(QtWidgets.QMainWindow, Ui_PersonTracker):
         """
         self.reid.save_features()
 
-
     def update_nombre_personnes(self):
         """
         Modifie le nombre de personne affiché
         """
-        nb_persons = self.db.fetch_nb_personnes()[0]
-        self.nombres_personnes_label.setText(f"∼ {self.reid.calc_nb_persons(nb_persons)}")
+        # nb_persons = self.db.fetch_nb_personnes()[0]
+        if len(self.cameras) == 2:
+            nb_persons = (len(self.cameras[1].passages_entrees) + self.start_nb_passages) // 2
+            self.nombres_personnes_label.setText(f"∼ {nb_persons}")
 
     def update_logs(self):
         """
@@ -194,6 +192,24 @@ class GUIApp(QtWidgets.QMainWindow, Ui_PersonTracker):
             camera.release()
 
         self.db.close_db()
+
+    def save_nombres_persons(self):
+        """
+        Sauvegarde du nombre de personnes dans un fichier.
+        """
+        with open("nb_persons.txt", "w") as f:
+            f.write(str(len(self.cameras[1].passages_entrees) + self.start_nb_passages))
+
+    @staticmethod
+    def load_nb_persons():
+        """
+        Chargement du nombre de fichier.
+        :return: Le nombre de passages devant la caméra enregistrés.
+        """
+        if not os.path.exists("nb_persons.txt"):
+            return 0
+        with open("nb_persons.txt", "r") as f:
+            return int(f.read())
 
 
 if __name__ == "__main__":
