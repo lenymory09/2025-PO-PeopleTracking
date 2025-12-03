@@ -3,9 +3,13 @@ models:
   # Fichier modèle
   yolo: 'models/yolov8n.pt'
 
-  # Modèle pour la ReID
+  # Modèle pour la ReID (Reconnaissance des personnes)
+  # Choisir le modèle voulu :
+  # osnet_ain_x1_0 : Modele le plus robuste pour faire de la reconnaissance de personnes.
+  # osnet_x1_0 : Modele de base
+  # resnet50 : Modele générale pour la reconnaissance des personnes.
   reid: 'osnet_ain_x1_0'
-  # Fichier pour le modèle
+  # Fichier pour le modèle (Prendre un fichier correspondant au modele de ReID.
   reid_model_file: 'models/osnet_ain_x1_0_msmt17_256x128_amsgrad_ep50_lr0.0015_coslr_b64_fb10_softmax_labsmth_flip_jitter.pth'
 
 # ReID Parameters
