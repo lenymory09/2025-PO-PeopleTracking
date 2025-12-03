@@ -6,7 +6,7 @@
  1. Installer windows (ubuntu non fonctionnel) sur un pc
 
 
- 2. Connecter vous au bon réseau
+ 2. Connecter vous au bon réseau grâce au routeur que vous avez branché et allumé
 
 
  3. Installer OBS studio sur windows avec le .exe sur leur site web (https://obsproject.com/). Pour le mac il suffit de l'installer le apple.dmg
